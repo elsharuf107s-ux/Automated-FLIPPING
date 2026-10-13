@@ -174,7 +174,9 @@ function sendToScanner(item) {
     item.middleman?.note ? `Middleman check: ${item.middleman.note}` : ''
   ].filter(Boolean).join('\n');
   form.dispatchEvent(new Event('input', { bubbles: true }));
-  location.hash = '#/scanner';
+  const scannerLauncher = document.querySelector('.nav-item[data-view="scanner"]');
+  if (scannerLauncher) scannerLauncher.click();
+  else location.hash = '#/scanner';
   toast('Opening the listing in AI Scanner…', { type: 'info', duration: 1800 });
   setTimeout(() => $('#analyzeBtn')?.click(), 120);
 }
