@@ -8,7 +8,7 @@
       "onAutoForward": "openPreview"
     }
   },
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "npm install && npm run setup:scraper",
   "postStartCommand": "bash -lc 'nohup npm start > /tmp/automated-flipping.log 2>&1 &'",
   "remoteEnv": {
     "PORT": "3000"
