@@ -15,6 +15,7 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run check
+      - run: npm test
       - name: Smoke test port 3000
         run: |
           node server.js > /tmp/flip-server.log 2>&1 &
