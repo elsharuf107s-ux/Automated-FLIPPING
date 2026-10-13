@@ -1,6 +1,6 @@
 {
   "name": "automated-flipping",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "AI-assisted reseller sourcing, flip scoring, inventory and listing workspace.",
   "type": "module",
@@ -8,13 +8,19 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "check": "node scripts/check.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "setup:scraper": "playwright install --with-deps chromium"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.26",
+    "ai": "^6.0.77",
     "express": "^5.1.0",
-    "openai": "^6.3.0"
+    "llm-scraper": "^2.0.0",
+    "openai": "^6.3.0",
+    "playwright": "^1.58.2",
+    "zod": "^4.3.6"
   }
 }
