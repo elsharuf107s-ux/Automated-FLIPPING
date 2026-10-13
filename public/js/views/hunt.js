@@ -34,14 +34,14 @@ function injectHuntUi() {
         ${EXAMPLES.map((example) => `<button class="chip" type="button" data-hunt-example="${esc(example)}">${esc(example)}</button>`).join('')}
       </div>
       <div class="form-actions split">
-        <span class="field-note small">Searches eBay, Depop, Poshmark, Mercari, ShopGoodwill, Grailed, OfferUp, Facebook Marketplace, Etsy and Walmart. Some sites may hide or remove listings before you open them.</span>
+        <span class="field-note small">Searches eBay, Depop, Poshmark, Mercari, ShopGoodwill, Grailed, OfferUp, Facebook Marketplace, Etsy and Walmart. FlipLab also tries to pull the original listing preview images automatically.</span>
         <button class="btn btn-primary btn-lg" type="submit" id="huntGo">${icon('spark')}<span>Hunt everywhere</span></button>
       </div>
     </form>
     <div class="finder-meta" id="huntMeta" hidden></div>
     <div id="huntResults"></div>
     <div class="panel guardrail" style="margin:18px 0">
-      ${icon('info')}<div><strong>How this works</strong><p>OpenAI searches the live web and gives you direct listing links. “Match” means the listing fits your prompt — it is not a guaranteed profit score. Use <b>Scrape + analyze</b> to have FlipLab open that exact listing and run the full flip analysis.</p></div>
+      ${icon('info')}<div><strong>Images + middleman mode</strong><p>Source photos are pulled automatically for evaluation and stay marked <b>reference only</b>. Do not repost another seller’s photos unless you own them or have permission. Consumer marketplace listings are also labeled with zero-inventory/dropshipping restrictions; a legitimate middleman workflow needs an authorized supplier or wholesale agreement.</p></div>
     </div>`;
   view.insertBefore(wrapper, setup);
 
@@ -58,15 +58,30 @@ function priceText(item) {
   return `${base} · ${item.shipping === 0 ? 'free shipping' : `+ ${money(item.shipping)} ship`}`;
 }
 
+function middlemanBadge(item) {
+  const policy = item.middleman || {};
+  const blocked = String(policy.status || '').startsWith('blocked');
+  return `<span class="deal-badge${blocked ? ' over' : ''}" title="${esc(policy.note || '')}">${esc(policy.label || 'Check seller rules')}</span>`;
+}
+
 function cardHtml(item, index) {
   const meta = [item.source, item.condition, `${item.matchScore}% prompt match`].filter(Boolean).join(' · ');
+  const preview = item.previewImages?.[0];
+  const count = item.previewImages?.length || 0;
   return `<article class="deal-card" data-hunt-index="${index}">
+    <a class="deal-photo" href="${esc(item.url)}" target="_blank" rel="noopener" aria-label="Open ${esc(item.title)}">
+      ${preview ? `<img src="${esc(preview)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : icon('image')}
+      <span class="deal-badge">${esc(item.source)}</span>
+      ${count > 1 ? `<span class="photo-count">${icon('camera')}${count}</span>` : ''}
+    </a>
     <div class="deal-body" style="min-height:100%">
-      <div class="deal-meta"><span class="deal-badge">${esc(item.source)}</span></div>
+      <div class="deal-meta">${middlemanBadge(item)}</div>
       <h3 style="margin-top:8px"><a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.title)}</a></h3>
       <div class="deal-price"><strong>${esc(priceText(item))}</strong></div>
       <div class="deal-meta">${esc(meta)}</div>
       <p class="seller-text" style="margin-top:10px">${esc(item.why || 'Matches your hunt prompt.')}</p>
+      ${preview ? `<p class="photo-note">${icon('info')}<span>Original listing image preview · reference only unless you own the rights or have permission to reuse it.</span></p>` : '<p class="field-note small">No source image was exposed in the page metadata. Scrape + analyze may still find listing photos.</p>'}
+      <p class="field-note small"><b>${esc(item.middleman?.label || 'Check seller rules')}:</b> ${esc(item.middleman?.note || 'Verify the selling channel and supplier agreement before using a zero-inventory workflow.')}</p>
       <div class="deal-actions" style="margin-top:auto;padding-top:14px">
         <button class="btn btn-primary btn-sm" type="button" data-hunt-action="analyze">${icon('spark')}<span>Scrape + analyze</span></button>
         <a class="btn btn-ghost btn-sm" href="${esc(item.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open listing</span></a>
@@ -86,7 +101,8 @@ function renderHunt() {
 
   const r = hunt.result;
   meta.hidden = false;
-  meta.innerHTML = `<div><b>${r.items.length}</b> live listing match${r.items.length === 1 ? '' : 'es'} · ${esc(r.summary)} <span class="muted">(${esc(r.model)})</span></div>`;
+  const pictured = r.items.filter((item) => item.previewImages?.length).length;
+  meta.innerHTML = `<div><b>${r.items.length}</b> live listing match${r.items.length === 1 ? '' : 'es'} · <b>${pictured}</b> with source images · ${esc(r.summary)} <span class="muted">(${esc(r.model)})</span></div>`;
 
   if (!r.items.length) {
     results.innerHTML = `<div class="empty finder-empty">${icon('search')}<strong>No strong direct listings found</strong>Try a broader budget, fewer brand restrictions, or a more common item.</div>`;
@@ -100,7 +116,7 @@ function renderHunt() {
 }
 
 function loadingHtml() {
-  return `<div class="deal-grid">${Array.from({ length: 6 }, () => '<div class="deal-card skel-card"><div style="padding:18px;display:grid;gap:12px"><div class="skel" style="height:12px;width:30%"></div><div class="skel" style="height:18px"></div><div class="skel" style="height:18px;width:55%"></div><div class="skel" style="height:54px"></div></div></div>').join('')}</div>`;
+  return `<div class="deal-grid">${Array.from({ length: 6 }, () => '<div class="deal-card skel-card"><div class="skel" style="aspect-ratio:1"></div><div style="padding:18px;display:grid;gap:12px"><div class="skel" style="height:12px;width:30%"></div><div class="skel" style="height:18px"></div><div class="skel" style="height:18px;width:55%"></div><div class="skel" style="height:54px"></div></div></div>').join('')}</div>`;
 }
 
 async function pollHunt(jobId, version) {
@@ -114,7 +130,7 @@ async function pollHunt(jobId, version) {
     const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
     const meta = $('#huntMeta');
     meta.hidden = false;
-    meta.innerHTML = `<div><span class="pulse"></span> Searching the marketplaces… <span class="muted">${seconds}s · you can stay on this page</span></div>`;
+    meta.innerHTML = `<div><span class="pulse"></span> Searching listings + pulling source images… <span class="muted">${seconds}s · you can stay on this page</span></div>`;
     await sleep(POLL_INTERVAL_MS);
   }
   throw new Error('AI Hunt is taking longer than expected. Try a more specific prompt.');
@@ -152,7 +168,11 @@ function sendToScanner(item) {
   form.elements.sourceUrl.value = item.url;
   if (item.title) form.elements.title.value = item.title;
   if (item.price != null) form.elements.purchasePrice.value = item.price;
-  form.elements.notes.value = [`Found by AI Hunt: ${item.why || 'Matched the sourcing prompt.'}`, `Prompt: ${hunt.prompt}`].join('\n');
+  form.elements.notes.value = [
+    `Found by AI Hunt: ${item.why || 'Matched the sourcing prompt.'}`,
+    `Prompt: ${hunt.prompt}`,
+    item.middleman?.note ? `Middleman check: ${item.middleman.note}` : ''
+  ].filter(Boolean).join('\n');
   form.dispatchEvent(new Event('input', { bubbles: true }));
   location.hash = '#/scanner';
   toast('Opening the listing in AI Scanner…', { type: 'info', duration: 1800 });
