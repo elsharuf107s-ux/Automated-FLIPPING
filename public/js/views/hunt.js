@@ -8,8 +8,11 @@ const EXAMPLES = [
   'Find men\'s sneakers under $50 from Nike, New Balance, or Adidas',
   'Find Y2K clothing under $30 that could have strong resale demand'
 ];
+const POLL_INTERVAL_MS = 1250;
+const HUNT_DEADLINE_MS = 75_000;
 
-const hunt = { result: null, prompt: '' };
+const hunt = { result: null, prompt: '', runVersion: 0 };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function injectHuntUi() {
   if ($('#huntForm')) return;
@@ -42,7 +45,6 @@ function injectHuntUi() {
     </div>`;
   view.insertBefore(wrapper, setup);
 
-  // The old API-powered eBay finder is still useful, but it is optional now.
   if (setup) {
     setup.querySelector('h3').textContent = 'Optional: connect eBay for the advanced eBay-only finder';
     setup.querySelector('p').textContent = 'AI Hunt above works with only your OpenAI key. Add eBay developer keys only if you want the older eBay API filters, market median, and bulk eBay analysis below.';
@@ -101,22 +103,46 @@ function loadingHtml() {
   return `<div class="deal-grid">${Array.from({ length: 6 }, () => '<div class="deal-card skel-card"><div style="padding:18px;display:grid;gap:12px"><div class="skel" style="height:12px;width:30%"></div><div class="skel" style="height:18px"></div><div class="skel" style="height:18px;width:55%"></div><div class="skel" style="height:54px"></div></div></div>').join('')}</div>`;
 }
 
+async function pollHunt(jobId, version) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < HUNT_DEADLINE_MS) {
+    if (version !== hunt.runVersion) return null;
+    const job = await api(`/api/hunt/${encodeURIComponent(jobId)}`);
+    if (job.status === 'completed') return job.result;
+    if (job.status === 'failed') throw new Error(job.error?.message || 'AI Hunt failed.');
+
+    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    const meta = $('#huntMeta');
+    meta.hidden = false;
+    meta.innerHTML = `<div><span class="pulse"></span> Searching the marketplaces… <span class="muted">${seconds}s · you can stay on this page</span></div>`;
+    await sleep(POLL_INTERVAL_MS);
+  }
+  throw new Error('AI Hunt is taking longer than expected. Try a more specific prompt.');
+}
+
 async function runHunt(prompt) {
   const button = $('#huntGo');
+  const version = ++hunt.runVersion;
   busy(button, true);
+  hunt.result = null;
   $('#huntMeta').hidden = true;
   $('#huntResults').innerHTML = loadingHtml();
   try {
-    hunt.result = await api('/api/hunt', { body: { prompt } });
+    const job = await api('/api/hunt', { body: { prompt } });
+    const result = await pollHunt(job.id, version);
+    if (!result || version !== hunt.runVersion) return;
+    hunt.result = result;
     hunt.prompt = prompt;
     renderHunt();
     toast(hunt.result.items.length ? `Found ${hunt.result.items.length} listing matches` : 'No strong matches found', { type: hunt.result.items.length ? 'success' : 'info' });
   } catch (error) {
+    if (version !== hunt.runVersion) return;
     hunt.result = null;
+    $('#huntMeta').hidden = true;
     $('#huntResults').innerHTML = `<div class="empty finder-empty">${icon('alert')}<strong>AI Hunt failed</strong>${esc(error.message)}</div>`;
     toast(error.message, { type: 'error' });
   } finally {
-    busy(button, false);
+    if (version === hunt.runVersion) busy(button, false);
   }
 }
 
