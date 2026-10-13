@@ -75,3 +75,13 @@ test('settings are clamped to sane numbers', async () => {
   assert.equal(settings.targetRoiPercent, 80);
   assert.equal('unknown' in settings, false);
 });
+
+test('reference photos keep only https URLs', async () => {
+  const item = await store.createItem({
+    title: 'From eBay',
+    externalId: 'v1|1|0',
+    referenceImages: ['https://i.ebayimg.com/a.jpg', 'http://insecure/b.jpg', 'javascript:alert(1)', 42]
+  });
+  assert.deepEqual(item.referenceImages, ['https://i.ebayimg.com/a.jpg']);
+  assert.equal(item.externalId, 'v1|1|0');
+});

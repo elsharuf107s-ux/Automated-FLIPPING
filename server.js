@@ -3,11 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { analyzeItem, testConnection } from './lib/ai.js';
+import { searchListings, getListing, testEbay } from './lib/ebay.js';
+import { analyzeListing } from './lib/finder.js';
 import { publicAiConfig, saveAiConfig, validateAiPatch } from './lib/config.js';
 import { UPLOADS_DIR } from './lib/paths.js';
 import { httpError } from './lib/errors.js';
 import {
-  listItems, getItem, createItem, updateItem, deleteItem, getSettings, saveSettings, imageAsDataUrl
+  listItems, getItem, createItem, updateItem, deleteItem, getSettings, saveSettings, imageAsDataUrl,
+  listSearches, createSearch, deleteSearch
 } from './lib/store.js';
 import { calc } from './public/js/econ.js';
 
@@ -99,7 +102,35 @@ app.patch('/api/ai-config', async (req, res) => {
 });
 
 app.post('/api/ai-config/test', async (req, res) => {
-  res.json(await testConnection(validateAiPatch(req.body || {})));
+  const draft = validateAiPatch(req.body || {});
+  res.json(req.body?.target === 'ebay' ? await testEbay(draft) : await testConnection(draft));
+});
+
+// Deal finder (eBay Browse API). Finds listings; buying and listing stay with you.
+app.post('/api/finder/search', async (req, res) => {
+  res.json(await searchListings(req.body || {}));
+});
+
+app.get('/api/finder/listings/:id', async (req, res) => {
+  res.json(await getListing(req.params.id));
+});
+
+app.post('/api/finder/analyze', async (req, res) => {
+  const { id, market } = req.body || {};
+  res.json(await analyzeListing(id, { median: Number(market?.median) || null }));
+});
+
+app.get('/api/finder/searches', async (_req, res) => {
+  res.json(await listSearches());
+});
+
+app.post('/api/finder/searches', async (req, res) => {
+  res.status(201).json(await createSearch(req.body || {}));
+});
+
+app.delete('/api/finder/searches/:id', async (req, res) => {
+  if (!(await deleteSearch(req.params.id))) throw httpError(404, 'Saved search not found');
+  res.status(204).end();
 });
 
 const CSV_COLUMNS = [
