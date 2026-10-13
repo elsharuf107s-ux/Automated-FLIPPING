@@ -1,0 +1,19 @@
+{
+  "name": "automated-flipping",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-assisted reseller sourcing, flip scoring, inventory and listing workspace.",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check lib/ai.js && node --check lib/store.js && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "openai": "^6.3.0"
+  }
+}
