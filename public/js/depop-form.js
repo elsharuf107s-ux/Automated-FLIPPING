@@ -36,10 +36,10 @@ export function inferDepopSource(depop = {}) {
 export function suggestPackageSize(depop = {}) {
   if (clean(depop.packageSize)) return clean(depop.packageSize, 60);
   const text = combinedText(depop);
-  if (/\b(puffer|sherpa|heavy coat|winter coat|parka|boots|blanket|bulky)\b/i.test(text)) return 'Extra large';
-  if (/\b(jacket|hoodie|sweatshirt|sweater|jeans|pants|trousers|shoes|sneakers)\b/i.test(text)) return 'Large';
-  if (/\b(t-?shirt|shirt|blouse|dress|skirt|shorts|top)\b/i.test(text)) return 'Medium';
-  if (/\b(hat|cap|scarf|belt|jewelry|jewellery|wallet|accessor)\b/i.test(text)) return 'Small';
+  if (/\b(puffers?|sherpa|heavy coats?|winter coats?|parkas?|boots?|blankets?|bulky)\b/i.test(text)) return 'Extra large';
+  if (/\b(jackets?|hoodies?|sweatshirts?|sweaters?|jeans|pants|trousers|shoes|sneakers?)\b/i.test(text)) return 'Large';
+  if (/\b(t-?shirts?|shirts?|blouses?|dresses?|skirts?|shorts|tops?)\b/i.test(text)) return 'Medium';
+  if (/\b(hats?|caps?|scarves?|belts?|jewelry|jewellery|wallets?|accessor(?:y|ies))\b/i.test(text)) return 'Small';
   return 'Check packaged weight';
 }
 
