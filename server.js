@@ -7,6 +7,7 @@ import { searchListings, getListing, testEbay } from './lib/ebay.js';
 import { analyzeListing } from './lib/finder.js';
 import { publicAiConfig, saveAiConfig, validateAiPatch } from './lib/config.js';
 import { scrapeProduct, mergeScrapedItem } from './lib/scraper.js';
+import { huntItems } from './lib/hunt.js';
 import { UPLOADS_DIR } from './lib/paths.js';
 import { httpError } from './lib/errors.js';
 import {
@@ -83,6 +84,12 @@ app.post('/api/scrape', async (req, res) => {
   const url = String(req.body?.url || req.body?.sourceUrl || '').trim();
   if (!url) throw httpError(400, 'Provide a product/listing URL.');
   res.json(await scrapeProduct(url));
+});
+
+// Natural-language sourcing: one prompt -> current listings across supported marketplaces.
+// This only discovers public listings. Opening/buying/publishing remains user-controlled.
+app.post('/api/hunt', async (req, res) => {
+  res.json(await huntItems(req.body?.prompt));
 });
 
 app.post('/api/analyze', async (req, res) => {
@@ -205,7 +212,7 @@ app.get('/api/source-guides', (_req, res) => {
     { name: 'ShopGoodwill', url: 'https://shopgoodwill.com/', note: 'Auction inventory. Check shipping before bidding.', kind: 'Auctions' },
     { name: 'eBay', url: 'https://www.ebay.com/', note: 'Use sold/completed filters manually to verify comps.', kind: 'Comps + sourcing' },
     { name: 'Facebook Marketplace', url: 'https://www.facebook.com/marketplace/', note: 'Strong for local bundles and pickup deals.', kind: 'Local' },
-    { name: 'Depop', url: 'https://www.depop.com/', note: 'Use for manual comp research and final listing. This app does not scrape or bot-post to Depop.', kind: 'Listing' }
+    { name: 'Depop', url: 'https://www.depop.com/', note: 'Use for manual comp research and final listing. This app does not bot-post to Depop.', kind: 'Listing' }
   ]);
 });
 
