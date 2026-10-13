@@ -66,19 +66,57 @@ export function generateDepopSku(depop = {}) {
   return `${brand}-${category}-${size}-${fingerprint}`;
 }
 
+function roundPrice(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.max(1, Math.round(number)) : 0;
+}
+
+export function depopPriceTargets(depop = {}) {
+  const balanced = roundPrice(depop.balancedPrice || depop.listPrice);
+  const offerFloor = roundPrice(depop.minOfferPrice);
+  const likely = roundPrice(depop.likelyToSellPrice || offerFloor || balanced * 0.82);
+  const lessLikely = roundPrice(depop.lessLikelyPrice || (balanced ? balanced * 1.16 : 0));
+  return {
+    likelyToSellPrice: balanced ? Math.min(balanced, likely || balanced) : likely,
+    balancedPrice: balanced,
+    lessLikelyPrice: Math.max(balanced, lessLikely || balanced)
+  };
+}
+
 export function completeDepopForm(depop = {}) {
   const quantity = Math.max(1, Math.min(99, Math.round(Number(depop.quantity) || 1)));
+  const source = inferDepopSource(depop);
+  const age = inferDepopAge(depop);
+  const packageSize = suggestPackageSize(depop);
+  const priceTargets = depopPriceTargets(depop);
   return {
     ...depop,
+    ...priceTargets,
     quantity,
     sku: generateDepopSku(depop),
-    source: inferDepopSource(depop),
-    age: inferDepopAge(depop),
+    source,
+    age,
     shippingMethod: clean(depop.shippingMethod, 80) || 'Depop Shipping (via USPS)',
-    packageSize: suggestPackageSize(depop),
+    packageSize,
     shippingAddress: clean(depop.shippingAddress, 160) || 'Use your saved Depop seller address',
-    sourceNeedsReview: inferDepopSource(depop) === 'Not specified',
-    ageNeedsReview: inferDepopAge(depop) === 'Not specified',
-    packageNeedsReview: suggestPackageSize(depop) === 'Check packaged weight'
+    sourceNeedsReview: source === 'Not specified',
+    ageNeedsReview: age === 'Not specified',
+    packageNeedsReview: packageSize === 'Check packaged weight',
+    completeness: {
+      photos: 'Use up to 8',
+      category: Boolean(clean(depop.category)),
+      brand: Boolean(clean(depop.brand)),
+      condition: Boolean(clean(depop.condition)),
+      colors: Array.isArray(depop.colors) && depop.colors.length > 0,
+      size: Boolean(clean(depop.size)),
+      quantity: true,
+      sku: true,
+      source: source !== 'Not specified',
+      age: age !== 'Not specified',
+      style: Array.isArray(depop.styleTags) && depop.styleTags.length > 0,
+      material: Boolean(clean(depop.material)),
+      price: Boolean(priceTargets.balancedPrice),
+      shipping: true
+    }
   };
 }
