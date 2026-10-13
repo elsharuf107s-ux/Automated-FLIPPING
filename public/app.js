@@ -9,6 +9,7 @@ import { initSources, loadSources } from './js/views/sources.js';
 import { initSettings, fillAiForm, fillSettingsForm, renderAiStatus, syncThemeChoice } from './js/views/settings.js';
 import { initFinder, renderFinder, loadSavedSearches, isReportOpen, closeReport } from './js/views/finder.js';
 import { initHunt } from './js/views/hunt.js';
+import { initDesktop, openDesktopWindow, isDesktopMode } from './js/desktop.js';
 
 const VIEWS = ['dashboard', 'finder', 'scanner', 'inventory', 'sources', 'settings'];
 const RENDERERS = { dashboard: renderDashboard, finder: renderFinder, inventory: renderInventory, scanner: renderScanEcon };
@@ -47,11 +48,10 @@ function render(view) {
   stale.delete(view);
 }
 
-function show(view) {
-  const changed = view !== current;
-  current = view;
+function activateView(view) {
   const section = $(`#view-${view}`);
-  $$('.view').forEach((el) => el.classList.toggle('active', el === section));
+  if (!section) return;
+  current = view;
   $$('.nav-item').forEach((el) => {
     const active = el.dataset.view === view;
     el.classList.toggle('active', active);
@@ -62,19 +62,31 @@ function show(view) {
   $('#pageEyebrow').textContent = section.dataset.eyebrow;
   document.title = `${section.dataset.title} · FlipLab`;
   if (stale.has(view)) render(view);
+}
+
+function show(view) {
+  if (isDesktopMode()) {
+    openDesktopWindow(view);
+    return;
+  }
+  const changed = view !== current;
+  const section = $(`#view-${view}`);
+  $$('.view').forEach((el) => el.classList.toggle('active', el === section));
+  activateView(view);
   if (changed) window.scrollTo(0, 0);
 }
 
 function parseHash() {
   const match = location.hash.match(/^#\/([a-z]+)(?:\/([\w-]+))?/i) || [];
-  return { view: VIEWS.includes(match[1]) ? match[1] : 'dashboard', id: match[2] };
+  const fallback = isDesktopMode() ? 'finder' : 'dashboard';
+  return { view: VIEWS.includes(match[1]) ? match[1] : fallback, id: match[2] };
 }
 
 async function route() {
   const { view, id } = parseHash();
   if (view === 'inventory' && id) {
-    show(current || 'inventory');
-    if (ready) openDrawer(id, { onClose: () => history.replaceState(null, '', `#/${current}`) });
+    show('inventory');
+    if (ready) openDrawer(id, { onClose: () => history.replaceState(null, '', `#/${current || 'inventory'}`) });
     return;
   }
   if (isDrawerOpen() && !(await requestClose())) return;
@@ -93,7 +105,21 @@ function onStateChange() {
 }
 
 /* ---------- Global interactions ---------- */
+function hashView(hash) {
+  const match = String(hash || '').match(/^#\/([a-z]+)/i);
+  return VIEWS.includes(match?.[1]) ? match[1] : null;
+}
+
 function goThen(hash, fn) {
+  if (isDesktopMode()) {
+    const view = hashView(hash);
+    if (view) {
+      history.replaceState(null, '', hash);
+      show(view);
+      requestAnimationFrame(fn);
+    }
+    return;
+  }
   if (location.hash === hash) {
     fn();
     return;
@@ -110,6 +136,20 @@ function bindGlobal() {
   window.addEventListener('hashchange', route);
   $('#themeToggle').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
   darkQuery.addEventListener('change', () => { if (themePref() === 'system') applyTheme('system'); });
+
+  $$('.nav-item[data-view]').forEach((link) => link.addEventListener('click', (event) => {
+    if (!isDesktopMode()) return;
+    event.preventDefault();
+    const view = link.dataset.view;
+    history.replaceState(null, '', `#/${view}`);
+    show(view);
+  }));
+  $('.brand').addEventListener('click', (event) => {
+    if (!isDesktopMode()) return;
+    event.preventDefault();
+    history.replaceState(null, '', '#/dashboard');
+    show('dashboard');
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !$('#confirmModal').open && (isDrawerOpen() || isReportOpen())) {
@@ -134,7 +174,14 @@ function bindGlobal() {
 
   document.addEventListener('click', (event) => {
     const row = event.target.closest('[data-open]');
-    if (row) location.hash = `#/inventory/${row.dataset.open}`;
+    if (!row) return;
+    if (isDesktopMode()) {
+      history.replaceState(null, '', `#/inventory/${row.dataset.open}`);
+      show('inventory');
+      if (ready) openDrawer(row.dataset.open, { onClose: () => history.replaceState(null, '', '#/inventory') });
+    } else {
+      location.hash = `#/inventory/${row.dataset.open}`;
+    }
   });
 
   document.addEventListener('click', async (event) => {
@@ -175,6 +222,8 @@ async function init() {
   initSettings({ onThemeChange: setTheme, currentTheme: themePref() });
   subscribe(onStateChange);
   showSkeletons();
+
+  await initDesktop({ onFocus: activateView });
   await route();
 
   try {
