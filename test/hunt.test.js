@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isAllowedHuntUrl, normalizeHuntPrompt, HUNT_SOURCES, getHuntJob } from '../lib/hunt.js';
+import { isAllowedHuntUrl, normalizeHuntPrompt, HUNT_SOURCES, getHuntJob, middlemanPolicyForSource } from '../lib/hunt.js';
 
 test('AI Hunt exposes a broad default marketplace set', () => {
   const names = HUNT_SOURCES.map((source) => source.name);
@@ -31,4 +31,11 @@ test('AI Hunt normalizes ordinary language prompts', () => {
 
 test('AI Hunt job lookup returns null for unknown or expired jobs', () => {
   assert.equal(getHuntJob('not-a-real-job'), null);
+});
+
+test('AI Hunt marks consumer marketplace arbitrage as non supplier-ready', () => {
+  assert.match(middlemanPolicyForSource('eBay').status, /^blocked/);
+  assert.equal(middlemanPolicyForSource('Mercari').status, 'blocked');
+  assert.equal(middlemanPolicyForSource('Depop').status, 'blocked');
+  assert.equal(middlemanPolicyForSource('Poshmark').status, 'review');
 });
