@@ -70,8 +70,25 @@ export function depopText(depop) {
   return [depop.description, tags].filter(Boolean).join('\n\n');
 }
 
+function imageStrip(images = []) {
+  const clean = [...new Set((Array.isArray(images) ? images : []).filter((src) => /^https?:\/\//i.test(src)))].slice(0, 8);
+  if (!clean.length) return '';
+  return `<div class="ref-photos" style="margin-top:10px">${clean.map((src, index) => `<a href="${esc(src)}" target="_blank" rel="noopener" title="Reference image ${index + 1}"><img src="${esc(src)}" alt="Reference image ${index + 1}" loading="lazy" referrerpolicy="no-referrer"></a>`).join('')}</div>`;
+}
+
+function priceCards(form) {
+  const cards = [
+    ['Likely to sell', form.likelyToSellPrice],
+    ['Balanced', form.balancedPrice],
+    ['Less likely', form.lessLikelyPrice]
+  ].filter(([, value]) => Number(value) > 0);
+  if (!cards.length) return '';
+  return `<div class="stat-grid" style="margin-bottom:12px">${cards.map(([label, value]) => `<div class="stat"><span>${esc(label)}</span><strong>${money(value)}</strong></div>`).join('')}</div>
+    <p class="muted">FlipLab price targets modeled after Depop's three-way pricing view. They are suggestions, not Depop's live market estimate.</p>`;
+}
+
 // Everything to type into Depop's listing form, in the same order the web form asks for it.
-export function depopHtml(depop, prefix) {
+export function depopHtml(depop, prefix, { images = [] } = {}) {
   if (!depop) return '';
   const form = completeDepopForm(depop);
   const row = (label, value, copyId, note = '') => (value
@@ -95,13 +112,14 @@ export function depopHtml(depop, prefix) {
     </div>
     <pre id="${prefix}DepopAll" hidden>${esc(depopText(form))}</pre>
 
-    <div class="copy-box"><h4>Description ${copyButton(`${prefix}DepopDesc`)}</h4><p id="${prefix}DepopDesc">${esc(form.description)}</p></div>
-
     <div class="copy-box">
       <h4>Photos</h4>
-      <p>Use up to 8 clear photos on Depop web. The first image should clearly show the item. Use only photos you own or have permission to reuse.</p>
+      ${imageStrip(images)}
+      <p>${images.length ? 'Source-page photos loaded for reference/analysis. ' : ''}Depop web supports up to 8 photos. Use only photos you own or have permission to reuse when publishing.</p>
       ${(form.photoTips || []).length ? `<ul class="checks">${form.photoTips.map((tip) => `<li>${esc(tip)}</li>`).join('')}</ul>` : ''}
     </div>
+
+    <div class="copy-box"><h4>Description ${copyButton(`${prefix}DepopDesc`)}</h4><p id="${prefix}DepopDesc">${esc(form.description)}</p></div>
 
     <div class="copy-box">
       <h4>Info</h4>
@@ -129,8 +147,9 @@ export function depopHtml(depop, prefix) {
 
     <div class="copy-box">
       <h4>Item price</h4>
+      ${priceCards(form)}
       <div class="dp-list">
-        ${row('Price (USD)', form.listPrice ? money(form.listPrice) : '', 'DepopPrice')}
+        ${row('Listing price', form.balancedPrice ? money(form.balancedPrice) : '', 'DepopPrice')}
         ${row('Accept offers from', form.minOfferPrice ? money(form.minOfferPrice) : '', 'DepopMinOffer')}
       </div>
     </div>
@@ -156,7 +175,7 @@ export function pricingHtml(item, depop, settings) {
   const buy = (Number(item.purchasePrice) || 0) + (Number(item.inboundShipping) || 0);
   const cls = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
   return `<div class="pricing">
-    <div><span>Buy on eBay for</span><strong>${money(buy)}</strong><small>${money(item.purchasePrice)} + ${money(item.inboundShipping)} shipping</small></div>
+    <div><span>Buy on source for</span><strong>${money(buy)}</strong><small>${money(item.purchasePrice)} + ${money(item.inboundShipping)} shipping</small></div>
     <div><span>List on Depop at</span><strong>${money(depop.listPrice)}</strong><small>accept offers from ${money(depop.minOfferPrice)}</small></div>
     <div><span>Your profit</span><strong class="${cls(atList.profit)}">${signedMoney(atList.profit)}</strong><small>${signedMoney(atOffer.profit)} at lowest offer · after fees + shipping</small></div>
   </div>`;
