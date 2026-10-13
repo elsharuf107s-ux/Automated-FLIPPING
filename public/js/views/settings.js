@@ -47,6 +47,93 @@ export function renderAiStatus() {
   $('#aiDot').className = `ai-dot ${ai.configured ? 'ok' : ai.provider === 'demo' ? 'warn' : 'bad'}`;
 }
 
+function renderEbayStatus() {
+  const ebay = state.ai?.ebay;
+  if (!ebay) return;
+  const chip = $('#ebayStatusChip');
+  chip.className = `status-chip ${ebay.configured ? 'ok' : 'warn'}`;
+  chip.innerHTML = ebay.configured ? `${icon('check')}Connected` : `${icon('alert')}Not connected`;
+  const sources = state.ai.sources;
+  const fromApp = sources.ebayClientId === 'app' || sources.ebayClientSecret === 'app';
+  $('#ebayKeyStatus').innerHTML = ebay.configured
+    ? `<span>Using App ID <code>${esc(ebay.clientIdPreview)}</code> · ${esc(SOURCE_LABEL[sources.ebayClientId] || '')}</span>
+       ${fromApp ? `<button class="link-btn" type="button" id="ebayRemove">${icon('trash')}Remove saved keys</button>` : ''}`
+    : `<span>${icon('info')} No eBay keys yet — the Deal Finder needs them.</span>`;
+}
+
+export function fillEbayForm() {
+  const ebay = state.ai?.ebay;
+  if (!ebay) return;
+  const form = $('#ebayForm');
+  form.elements.ebayClientId.value = '';
+  form.elements.ebayClientId.placeholder = ebay.configured ? `${ebay.clientIdPreview} — paste to replace` : 'YourName-FlipLab-PRD-…';
+  form.elements.ebayClientSecret.value = '';
+  form.elements.ebayClientSecret.placeholder = ebay.secretSet ? 'Saved — paste a new secret to replace' : 'PRD-…';
+  renderEbayStatus();
+}
+
+function ebayPatch() {
+  const form = $('#ebayForm');
+  const patch = {};
+  const id = form.elements.ebayClientId.value.trim();
+  const secret = form.elements.ebayClientSecret.value.trim();
+  if (id) patch.ebayClientId = id;
+  if (secret) patch.ebayClientSecret = secret;
+  return patch;
+}
+
+function showResult(boxId, result) {
+  const box = $(boxId);
+  box.hidden = false;
+  box.className = `test-result ${result.ok ? 'ok' : 'bad'}`;
+  box.innerHTML = `${icon(result.ok ? 'check' : 'alert')}<div>${esc(result.message)}${result.latencyMs ? `<small>${result.latencyMs} ms</small>` : ''}</div>`;
+}
+
+async function submitEbay(event) {
+  event.preventDefault();
+  const patch = ebayPatch();
+  if (!Object.keys(patch).length) {
+    toast('Paste your App ID and Cert ID first.', { type: 'error' });
+    return;
+  }
+  const btn = $('#ebaySave');
+  busy(btn, true);
+  try {
+    await saveAi(patch);
+    fillEbayForm();
+    $('#ebayTestResult').hidden = true;
+    toast(state.ai.ebay.configured ? 'eBay connected — try the Deal Finder' : 'Saved. Add the other key too.', { type: 'success' });
+  } catch (error) {
+    toast(error.message, { type: 'error' });
+  } finally {
+    busy(btn, false);
+  }
+}
+
+async function testEbayKeys() {
+  const btn = $('#ebayTest');
+  busy(btn, true);
+  try {
+    showResult('#ebayTestResult', await api('/api/ai-config/test', { body: { ...ebayPatch(), target: 'ebay' } }));
+  } catch (error) {
+    showResult('#ebayTestResult', { ok: false, message: error.message });
+  } finally {
+    busy(btn, false);
+  }
+}
+
+async function removeEbayKeys() {
+  const ok = await confirmDialog({ title: 'Remove saved eBay keys?', body: 'The Deal Finder will stop working until you add keys again (or set EBAY_CLIENT_ID / EBAY_CLIENT_SECRET).', confirmLabel: 'Remove keys' });
+  if (!ok) return;
+  try {
+    await saveAi({ ebayClientId: '', ebayClientSecret: '' });
+    fillEbayForm();
+    toast('eBay keys removed', { type: 'success' });
+  } catch (error) {
+    toast(error.message, { type: 'error' });
+  }
+}
+
 export function fillAiForm() {
   const ai = state.ai;
   if (!ai) return;
@@ -60,6 +147,7 @@ export function fillAiForm() {
   showProviderFields();
   renderKeyStatus();
   renderAiStatus();
+  fillEbayForm();
 }
 
 export function fillSettingsForm() {
@@ -93,12 +181,7 @@ function aiPatch() {
   return patch;
 }
 
-function showTestResult(result) {
-  const box = $('#aiTestResult');
-  box.hidden = false;
-  box.className = `test-result ${result.ok ? 'ok' : 'bad'}`;
-  box.innerHTML = `${icon(result.ok ? 'check' : 'alert')}<div>${esc(result.message)}${result.latencyMs ? `<small>${result.latencyMs} ms</small>` : ''}</div>`;
-}
+const showTestResult = (result) => showResult('#aiTestResult', result);
 
 async function testAi() {
   const btn = $('#aiTest');
@@ -163,6 +246,19 @@ export function initSettings({ onThemeChange, currentTheme }) {
     field.type = show ? 'text' : 'password';
     $('#keyReveal').innerHTML = icon(show ? 'eye-off' : 'eye');
     $('#keyReveal').setAttribute('aria-label', show ? 'Hide key' : 'Show key');
+  });
+
+  $('#ebayForm').addEventListener('submit', submitEbay);
+  $('#ebayTest').addEventListener('click', testEbayKeys);
+  $('#ebayKeyStatus').addEventListener('click', (event) => {
+    if (event.target.closest('#ebayRemove')) removeEbayKeys();
+  });
+  $('#ebayReveal').addEventListener('click', () => {
+    const field = $('#ebaySecret');
+    const show = field.type === 'password';
+    field.type = show ? 'text' : 'password';
+    $('#ebayReveal').innerHTML = icon(show ? 'eye-off' : 'eye');
+    $('#ebayReveal').setAttribute('aria-label', show ? 'Hide secret' : 'Show secret');
   });
 
   $('#settingsForm').addEventListener('submit', async (event) => {

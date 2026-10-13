@@ -7,9 +7,10 @@ import { initInventory, renderInventory, focusInventorySearch } from './js/views
 import { initDrawer, openDrawer, requestClose, isDrawerOpen, syncDrawer } from './js/views/drawer.js';
 import { initSources, loadSources } from './js/views/sources.js';
 import { initSettings, fillAiForm, fillSettingsForm, renderAiStatus, syncThemeChoice } from './js/views/settings.js';
+import { initFinder, renderFinder, loadSavedSearches, isReportOpen, closeReport } from './js/views/finder.js';
 
-const VIEWS = ['dashboard', 'scanner', 'inventory', 'sources', 'settings'];
-const RENDERERS = { dashboard: renderDashboard, inventory: renderInventory, scanner: renderScanEcon };
+const VIEWS = ['dashboard', 'finder', 'scanner', 'inventory', 'sources', 'settings'];
+const RENDERERS = { dashboard: renderDashboard, finder: renderFinder, inventory: renderInventory, scanner: renderScanEcon };
 const THEME_KEY = 'fliplab-theme';
 
 let current = null;
@@ -76,6 +77,7 @@ async function route() {
     return;
   }
   if (isDrawerOpen() && !(await requestClose())) return;
+  closeReport();
   show(view);
 }
 
@@ -110,12 +112,13 @@ function bindGlobal() {
   darkQuery.addEventListener('change', () => { if (themePref() === 'system') applyTheme('system'); });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && isDrawerOpen() && !$('#confirmModal').open) {
+    if (event.key === 'Escape' && !$('#confirmModal').open && (isDrawerOpen() || isReportOpen())) {
       event.preventDefault();
-      requestClose();
+      if (isDrawerOpen()) requestClose();
+      else closeReport();
       return;
     }
-    if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target) || isDrawerOpen()) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target) || isDrawerOpen() || isReportOpen()) return;
     if (event.key === '/') {
       event.preventDefault();
       goThen('#/inventory', focusInventorySearch);
@@ -142,11 +145,13 @@ function bindGlobal() {
     const source = document.getElementById(button.dataset.copy);
     if (!source || !(await copyText(source.textContent))) return;
     const label = button.querySelector('span');
+    if (label && !button.dataset.label) button.dataset.label = label.textContent;
     button.classList.add('done');
     if (label) label.textContent = 'Copied';
-    setTimeout(() => {
+    clearTimeout(button.copyTimer);
+    button.copyTimer = setTimeout(() => {
       button.classList.remove('done');
-      if (label) label.textContent = 'Copy';
+      if (label) label.textContent = button.dataset.label;
     }, 1400);
   });
 
@@ -168,6 +173,7 @@ async function init() {
   initInventory(() => render('inventory'));
   initDrawer();
   initSources();
+  initFinder();
   initSettings({ onThemeChange: setTheme, currentTheme: themePref() });
   subscribe(onStateChange);
   showSkeletons();
@@ -191,6 +197,7 @@ async function init() {
     toast(`Could not reach the FlipLab server: ${error.message}`, { type: 'error' });
   }
   loadSources();
+  loadSavedSearches();
 }
 
 init();

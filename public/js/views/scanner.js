@@ -2,7 +2,7 @@ import { $, esc, compressImage, compsUrl, itemQuery, copyText, listingText } fro
 import { calc, num } from '../econ.js';
 import { state, api, createItem } from '../data.js';
 import { icon, toast, busy } from '../ui.js';
-import { scanEconHtml, aiReportHtml } from '../report.js';
+import { scanEconHtml, aiReportHtml, depopHtml, depopText } from '../report.js';
 
 const DRAFT_KEY = 'fliplab-scan-draft';
 const MONEY_FIELDS = ['purchasePrice', 'inboundShipping', 'repairCost', 'targetPrice', 'outboundShipping'];
@@ -104,6 +104,7 @@ function renderResult() {
     ? `<a class="btn btn-ghost" href="#/inventory/${esc(scan.savedId)}">${icon('check')}<span>Saved — open</span></a>`
     : `<button class="btn btn-primary" type="button" id="saveItem">${icon('plus')}<span>Save to inventory</span></button>`;
   $('#resultPanel').innerHTML = `${aiReportHtml(ai, c, 'scan')}
+    ${depopHtml(ai.depop, 'scan')}
     <div class="result-actions">
       <a class="btn btn-ghost" href="${esc(compsUrl('ebay', itemQuery(item) || ai.suggestedTitle))}" target="_blank" rel="noopener" title="Open eBay sold listings">${icon('external')}<span>Comps</span></a>
       <button class="btn btn-ghost" type="button" id="copyListing">${icon('copy')}<span>Copy listing</span></button>
@@ -228,7 +229,8 @@ export function initScanner() {
     if (!target) return;
     if (target.id === 'saveItem') save(target);
     if (target.id === 'copyListing' && scan.analysis) {
-      if (await copyText(listingText(scan.analysis))) toast('Listing copied', { type: 'success' });
+      const text = scan.analysis.depop ? depopText(scan.analysis.depop) : listingText(scan.analysis);
+      if (await copyText(text)) toast('Listing copied', { type: 'success' });
     }
   });
 }

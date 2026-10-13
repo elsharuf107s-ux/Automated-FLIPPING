@@ -52,6 +52,8 @@
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
       <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
       <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5-5 4 4 2.5-2.5L20 19"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/></symbol>
       <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5 4.5 14H11l-1 7.5L19.5 10H13z"/></symbol>
     </defs>
   </svg>
@@ -64,8 +66,9 @@
         <span class="brand-text"><strong>FlipLab</strong><small>Automated Flipping</small></span>
       </a>
       <nav class="nav" aria-label="Main">
-        <a class="nav-item" href="#/dashboard" data-view="dashboard"><svg class="i"><use href="#i-home"/></svg><span>Dashboard</span></a>
-        <a class="nav-item" href="#/scanner" data-view="scanner"><svg class="i"><use href="#i-spark"/></svg><span>AI Scanner</span></a>
+        <a class="nav-item" href="#/dashboard" data-view="dashboard"><svg class="i"><use href="#i-home"/></svg><span data-short="Home">Dashboard</span></a>
+        <a class="nav-item" href="#/finder" data-view="finder"><svg class="i"><use href="#i-target"/></svg><span data-short="Finder">Deal Finder</span></a>
+        <a class="nav-item" href="#/scanner" data-view="scanner"><svg class="i"><use href="#i-spark"/></svg><span data-short="Scan">AI Scanner</span></a>
         <a class="nav-item" href="#/inventory" data-view="inventory"><svg class="i"><use href="#i-box"/></svg><span>Inventory</span><em class="nav-count" id="navCount" hidden>0</em></a>
         <a class="nav-item" href="#/sources" data-view="sources"><svg class="i"><use href="#i-compass"/></svg><span>Sources</span></a>
         <a class="nav-item" href="#/settings" data-view="settings"><svg class="i"><use href="#i-sliders"/></svg><span>Settings</span></a>
@@ -106,6 +109,39 @@
         <div class="kpi-grid" id="kpis"></div>
 
         <div id="dashBody"></div>
+      </section>
+
+      <!-- DEAL FINDER -->
+      <section class="view" id="view-finder" data-title="Deal Finder" data-eyebrow="Find underpriced items">
+        <article class="panel finder-setup" id="finderSetup" hidden>
+          <div class="setup-icon"><svg class="i"><use href="#i-target"/></svg></div>
+          <div>
+            <h3>Connect eBay to start finding deals</h3>
+            <p>FlipLab searches eBay through its official API, ranks listings by how far they sit below the typical asking price, and the AI prices each one and writes your Depop listing. It needs a free eBay developer key.</p>
+            <a class="btn btn-primary" href="#/settings">Add eBay keys in Settings</a>
+          </div>
+        </article>
+
+        <form class="panel finder-form" id="finderForm" autocomplete="off">
+          <div class="finder-row">
+            <label class="search-field grow"><svg class="i"><use href="#i-search"/></svg><input name="query" type="search" placeholder="What are you hunting for? e.g. carhartt detroit jacket" aria-label="Search eBay" required minlength="2" maxlength="100"></label>
+            <button class="btn btn-primary btn-lg" type="submit" id="finderGo"><svg class="i"><use href="#i-target"/></svg><span>Find deals</span></button>
+          </div>
+          <div class="finder-filters">
+            <label>Min price<span class="money-input"><input name="minPrice" type="number" min="0" step="1" placeholder="0" inputmode="decimal"></span></label>
+            <label>Max price<span class="money-input"><input name="maxPrice" type="number" min="0" step="1" placeholder="Any" inputmode="decimal"></span></label>
+            <label>Condition<select name="condition"><option value="any">Any</option><option value="used">Used</option><option value="new">New</option></select></label>
+            <label>Format<select name="format"><option value="all">Buy It Now + auctions</option><option value="buy">Buy It Now</option><option value="auction">Auctions</option></select></label>
+            <label>Sort<select name="sort"><option value="best">Best deals</option><option value="newest">Newly listed</option><option value="ending">Ending soonest</option><option value="price">Lowest price</option></select></label>
+          </div>
+          <div class="saved-searches">
+            <div class="chips" id="savedSearches"></div>
+            <button class="btn btn-ghost btn-sm" type="button" id="saveSearch"><svg class="i"><use href="#i-bookmark"/></svg>Save this search</button>
+          </div>
+        </form>
+
+        <div class="finder-meta" id="finderMeta" hidden></div>
+        <div id="finderResults"></div>
       </section>
 
       <!-- SCANNER -->
@@ -217,6 +253,7 @@
       <!-- SETTINGS -->
       <section class="view" id="view-settings" data-title="Settings" data-eyebrow="Configuration">
         <div class="settings-grid">
+          <div class="settings-stack">
           <form class="panel" id="aiForm" autocomplete="off">
             <div class="panel-head"><div><p class="eyebrow">AI provider</p><h3>Analysis engine &amp; API keys</h3></div><span class="status-chip" id="aiStatusChip"></span></div>
 
@@ -257,6 +294,30 @@
             <p class="field-note small"><svg class="i"><use href="#i-info"/></svg><span>Keys are stored only on this server in <code>data/ai-config.json</code> (git-ignored, owner-only permissions) and are never sent back to the browser. A key saved here overrides the <code>OPENAI_API_KEY</code> environment variable / Codespaces secret; remove it to fall back.</span></p>
           </form>
 
+          <form class="panel" id="ebayForm" autocomplete="off">
+            <div class="panel-head"><div><p class="eyebrow">Deal finder</p><h3>eBay connection</h3></div><span class="status-chip" id="ebayStatusChip"></span></div>
+            <ol class="setup-steps">
+              <li>Sign in (free) at <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener">developer.ebay.com</a> and create an application keyset under <b>Production</b>.</li>
+              <li>If eBay asks about <em>marketplace account deletion notifications</em>, choose the exemption — FlipLab doesn’t store eBay user data.</li>
+              <li>Paste the <b>App ID (Client ID)</b> and <b>Cert ID (Client Secret)</b> below.</li>
+            </ol>
+            <label>App ID (Client ID)<input name="ebayClientId" spellcheck="false" autocapitalize="off" placeholder="YourName-FlipLab-PRD-…"></label>
+            <label>Cert ID (Client Secret)
+              <span class="key-field">
+                <svg class="i"><use href="#i-key"/></svg>
+                <input id="ebaySecret" name="ebayClientSecret" type="password" placeholder="PRD-…" autocomplete="new-password" spellcheck="false" autocapitalize="off">
+                <button class="icon-btn" type="button" id="ebayReveal" aria-label="Show secret"><svg class="i"><use href="#i-eye"/></svg></button>
+              </span>
+            </label>
+            <div class="key-status" id="ebayKeyStatus"></div>
+            <div class="test-result" id="ebayTestResult" hidden></div>
+            <div class="form-actions split">
+              <button class="btn btn-ghost" type="button" id="ebayTest"><svg class="i"><use href="#i-plug"/></svg><span>Test connection</span></button>
+              <button class="btn btn-primary" type="submit" id="ebaySave"><span>Save eBay keys</span></button>
+            </div>
+          </form>
+          </div>
+
           <div class="settings-stack">
             <form class="panel" id="settingsForm">
               <div class="panel-head"><div><p class="eyebrow">Economics</p><h3>Default assumptions</h3></div></div>
@@ -292,6 +353,8 @@
 
   <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
   <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden></aside>
+  <div class="drawer-backdrop" id="reportBackdrop" hidden></div>
+  <aside class="drawer wide" id="reportDrawer" role="dialog" aria-modal="true" aria-labelledby="reportTitle" hidden></aside>
 
   <dialog class="modal" id="confirmModal">
     <form method="dialog">

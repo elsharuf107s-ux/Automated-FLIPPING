@@ -4,6 +4,7 @@ A Codespaces-ready AI-assisted reseller operating system for sourcing, flip scor
 
 ## What it does
 
+- **Deal Finder:** search eBay (official API) for what you flip, see each listing ranked by how far it sits below the typical asking price, and let the AI price it and write your full Depop listing.
 - Drag/drop, paste, or click to add an item photo (compressed in the browser) and add basic sourcing details.
 - Analyze the item with OpenAI vision, local Ollama/Qwen2.5-VL, or the built-in demo scorer.
 - Get a **BUY / WATCH / PASS** decision, 0–100 flip score, estimated resale range, max buy price, demand/risk notes, and verification checklist.
@@ -13,7 +14,7 @@ A Codespaces-ready AI-assisted reseller operating system for sourcing, flip scor
 - Open any item to edit every field, change its photo, record the actual sale price and date, or re-run the AI.
 - Search, filter and sort inventory; export it to CSV.
 - Dashboard with realized profit by month, pipeline by status, and top watchlist opportunities.
-- **Manage the AI provider and API key inside the app** (Settings) — no restart needed.
+- **Manage the AI provider, API key and eBay keys inside the app** (Settings) — no restart needed.
 - Dark and light themes, works on phones, keyboard shortcuts.
 - Run as a browser dashboard on **port 3000** in GitHub Codespaces.
 
@@ -32,6 +33,24 @@ npm run dev
 ```
 
 Then open the **Ports** tab and open port `3000`.
+
+## Deal Finder (find items on eBay → list on Depop)
+
+1. **Connect eBay once.** Create a free account at [developer.ebay.com](https://developer.ebay.com/my/keys), create an application keyset under **Production**, and paste the **App ID (Client ID)** and **Cert ID (Client Secret)** into **Settings → eBay connection**. If eBay asks about *marketplace account deletion notifications*, choose the exemption — FlipLab doesn't store eBay user data. Click **Test connection**, then **Save eBay keys**. (Or set `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` as environment variables.)
+2. **Search.** Open **Deal Finder**, type what you're hunting for, and set a max price, condition and format. FlipLab also looks up the typical asking price for that search and badges each listing with how far below it sits — **Best deals** sorts by that.
+3. **Analyze.** Click **Analyze** on a listing (or **Analyze top 10**). The AI looks at the seller's photos and details and returns:
+   - a BUY / WATCH / PASS score, estimated resale range and max buy price
+   - **pricing**: what you pay on eBay (with shipping), the price to list at on Depop, the lowest offer worth accepting, and your profit after fees and shipping
+   - a **ready-to-paste Depop listing**: description, up to 5 hashtags, category, brand, size, condition (Depop's options), colours, style tags and material, plus which measurements and photos to take
+4. **Save it.** **Watch** adds it to your watchlist; **I bought it** adds it to inventory as bought. The original listing photos and the Depop listing stay with the item.
+5. **List it yourself on Depop** using **Copy description + tags** and the other fields.
+
+Good to know:
+
+- FlipLab only *finds and prepares* — it never buys on eBay or posts to Depop for you. Depop and Facebook don't allow bots to search or post, so those stay manual on purpose.
+- The "typical asking price" comes from current eBay listings, not sold prices. Use **Sold comps** in the report to check what actually sold before you buy.
+- The seller's photos are shown so you can judge the item. They belong to the seller, and Depop expects photos of the item you actually have, so take your own once it arrives (each report includes a "Photos to take" list).
+- eBay gives new developer keys a daily call limit; each search uses 2 calls and each analysis uses 1, plus one AI request.
 
 ## Add OpenAI AI analysis
 
@@ -135,8 +154,10 @@ Automated-FLIPPING/
 ├── .devcontainer/devcontainer.json   # Codespaces + port 3000
 ├── .github/workflows/ci.yml          # syntax checks, tests, smoke test
 ├── lib/
-│   ├── ai.js                         # OpenAI, Ollama, fallback scorer, connection test
-│   ├── config.js                     # AI provider + API key settings (app → env → default)
+│   ├── ai.js                         # OpenAI, Ollama, fallback scorer, Depop listing, connection test
+│   ├── config.js                     # AI + eBay key settings (app → env → default)
+│   ├── ebay.js                       # eBay Browse API client (search, item details, market stats)
+│   ├── finder.js                     # eBay listing → FlipLab item + analysis
 │   ├── store.js                      # JSON persistence, write queue, photo files
 │   ├── paths.js                      # data directory locations
 │   └── errors.js
@@ -148,9 +169,9 @@ Automated-FLIPPING/
 │       ├── econ.js                   # unit economics (shared with the server)
 │       ├── data.js                   # client state + API calls
 │       ├── ui.js / report.js / util.js
-│       └── views/                    # dashboard, scanner, inventory, drawer, settings, sources
+│       └── views/                    # dashboard, finder, scanner, inventory, drawer, settings, sources
 ├── scripts/check.js                  # syntax check for every JS file
-├── test/                             # node:test suites (store, config, API)
+├── test/                             # node:test suites (store, config, API, finder) + fake eBay server
 ├── server.js                         # Express API
 ├── .env.example
 └── package.json
@@ -172,7 +193,7 @@ Set `FLIPLAB_DATA_DIR` to store it somewhere else. In a Codespace that data stay
 npm install
 npm run dev     # restart on file changes
 npm run check   # syntax-check every JS file
-npm test        # store, config and API tests
+npm test        # store, config, API and deal finder tests (uses a fake eBay)
 npm start
 ```
 

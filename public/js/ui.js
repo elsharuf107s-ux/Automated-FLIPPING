@@ -78,8 +78,9 @@ export function scoreRing(score, { size = 96, stroke = 8, decision, small = fals
 }
 
 export function thumb(item, cls = 'thumb') {
-  return item.image
-    ? `<img class="${cls}" src="${esc(item.image)}" alt="" loading="lazy" decoding="async">`
+  const src = item.image || item.referenceImages?.[0];
+  return src
+    ? `<img class="${cls}" src="${esc(src)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`
     : `<div class="${cls} blank">${icon('image')}</div>`;
 }
 

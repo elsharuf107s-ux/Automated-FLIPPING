@@ -2,7 +2,7 @@ import { $, esc, shortDate, timeAgo, compressImage, compsUrl, itemQuery, copyTex
 import { calc, num } from '../econ.js';
 import { state, findItem, updateItem, deleteItem, reanalyzeItem } from '../data.js';
 import { icon, toast, busy, confirmDialog, statusDot } from '../ui.js';
-import { itemEconHtml, aiReportHtml } from '../report.js';
+import { itemEconHtml, aiReportHtml, depopHtml, depopText } from '../report.js';
 
 const STATUSES = ['watching', 'bought', 'listed', 'sold', 'passed'];
 const CONDITIONS = ['', 'New with tags', 'Like new', 'Excellent', 'Good', 'Fair', 'Needs repair'];
@@ -53,6 +53,7 @@ function aiSectionHtml(item) {
       <button class="btn btn-primary btn-sm" type="button" data-action="reanalyze" style="margin-top:10px">${icon('spark')}Run analysis</button></div>`;
   }
   return `${aiReportHtml(item.ai, c, 'drawer')}
+    ${depopHtml(item.ai.depop, 'drawer')}
     <div class="form-actions">
       <button class="btn btn-ghost btn-sm" type="button" data-action="copy-listing">${icon('copy')}Copy listing</button>
       <button class="btn btn-ghost btn-sm" type="button" data-action="reanalyze">${icon('refresh')}Re-run analysis</button>
@@ -117,6 +118,9 @@ function render(item) {
           <textarea name="notes" rows="4" maxlength="4000" aria-label="Notes" placeholder="Condition, measurements, flaws…">${esc(item.notes || '')}</textarea>
         </section>
       </form>
+      ${(item.referenceImages || []).length ? `<section><h4>Original listing photos</h4>
+        <div class="ref-photos">${item.referenceImages.map((src) => `<a href="${esc(src)}" target="_blank" rel="noopener"><img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"></a>`).join('')}</div>
+        <p class="photo-note">${icon('info')}<span>Seller’s photos for reference. Add your own photo (top left) once the item arrives — that’s what Depop expects.</span></p></section>` : ''}
       <section id="drawerAi"><h4>AI report</h4>${aiSectionHtml(item)}</section>
     </div>
     <div class="drawer-foot">
@@ -192,7 +196,8 @@ async function onClick(event) {
   if (action === 'photo') $('#drawerImage').click();
   if (action === 'copy-listing') {
     const item = findItem(drawer.id);
-    if (item?.ai && (await copyText(listingText(item.ai)))) toast('Listing copied', { type: 'success' });
+    const text = item?.ai?.depop ? depopText(item.ai.depop) : item?.ai && listingText(item.ai);
+    if (text && (await copyText(text))) toast('Listing copied', { type: 'success' });
   }
 }
 

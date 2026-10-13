@@ -1,4 +1,5 @@
 import { esc, money, signedMoney, pct } from './util.js';
+import { calc } from './econ.js';
 import { icon, decisionBadge, scoreRing, copyButton } from './ui.js';
 
 const cell = (label, value, cls = '') => `<div class="econ-cell"><span>${label}</span><strong class="${cls}">${value}</strong></div>`;
@@ -56,9 +57,61 @@ export function aiReportHtml(ai, c, prefix) {
     </div>
     ${ai.warning ? `<div class="copy-box warn"><h4>${icon('alert')} AI fallback used</h4><p>${esc(ai.warning)} Showing local demo scoring instead.</p></div>` : ''}
     ${ai.rationale ? `<div class="copy-box"><h4>Why</h4><p>${esc(ai.rationale)}</p></div>` : ''}
-    <div class="copy-box"><h4>Listing title ${copyButton(`${prefix}Title`)}</h4><p id="${prefix}Title">${esc(ai.suggestedTitle || '')}</p></div>
+    ${ai.depop ? '' : `<div class="copy-box"><h4>Listing title ${copyButton(`${prefix}Title`)}</h4><p id="${prefix}Title">${esc(ai.suggestedTitle || '')}</p></div>
     <div class="copy-box"><h4>Description ${copyButton(`${prefix}Description`)}</h4><p id="${prefix}Description">${esc(ai.suggestedDescription || '')}</p>
       ${keywords.length ? `<div class="tags">${keywords.map((k) => `<span class="tag">${esc(k)}</span>`).join('')}</div>` : ''}
-    </div>
+    </div>`}
     ${checks.length ? `<div class="copy-box"><h4>Verify before buying or listing</h4><ul class="checks">${checks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}`;
+}
+
+export function depopText(depop) {
+  const tags = (depop.hashtags || []).map((tag) => `#${tag}`).join(' ');
+  return [depop.description, tags].filter(Boolean).join('\n\n');
+}
+
+// Everything to type into Depop's listing form, in the order the form asks for it.
+export function depopHtml(depop, prefix) {
+  if (!depop) return '';
+  const row = (label, value, copyId) => (value
+    ? `<div class="dp-row"><span>${label}</span><strong${copyId ? ` id="${prefix}${copyId}"` : ''}>${esc(value)}</strong>${copyId ? copyButton(`${prefix}${copyId}`) : ''}</div>`
+    : '');
+  const tags = (depop.hashtags || []).map((tag) => `#${tag}`).join(' ');
+  return `<section class="depop-pack">
+    <div class="depop-head">
+      <div><p class="eyebrow">Depop listing</p><h3>Ready to paste</h3></div>
+      <button class="btn btn-primary btn-sm" type="button" data-copy="${prefix}DepopAll">${icon('copy')}<span>Copy description + tags</span></button>
+    </div>
+    <pre id="${prefix}DepopAll" hidden>${esc(depopText(depop))}</pre>
+    <div class="copy-box"><h4>Description ${copyButton(`${prefix}DepopDesc`)}</h4><p id="${prefix}DepopDesc">${esc(depop.description)}</p></div>
+    <div class="dp-list">
+      ${row('Price (USD)', depop.listPrice ? String(depop.listPrice) : '', 'DepopPrice')}
+      ${row('Accept offers from', depop.minOfferPrice ? money(depop.minOfferPrice) : '')}
+      ${row('Category', depop.category)}
+      ${row('Brand', depop.brand, 'DepopBrand')}
+      ${row('Size', depop.size)}
+      ${row('Condition', depop.condition)}
+      ${row('Colour', (depop.colors || []).join(', '))}
+      ${row('Style', (depop.styleTags || []).join(', '))}
+      ${row('Material', depop.material)}
+      ${row('Hashtags', tags, 'DepopTags')}
+    </div>
+    ${(depop.measurements || []).length || (depop.photoTips || []).length ? `<div class="dp-tips">
+      ${(depop.measurements || []).length ? `<div><h4>Measure</h4><ul>${depop.measurements.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
+      ${(depop.photoTips || []).length ? `<div><h4>Photos to take</h4><ul>${depop.photoTips.map((m) => `<li>${esc(m)}</li>`).join('')}</ul></div>` : ''}
+    </div>` : ''}
+  </section>`;
+}
+
+// Buy → list → profit summary for a sourced listing.
+export function pricingHtml(item, depop, settings) {
+  if (!depop?.listPrice) return '';
+  const atList = calc({ ...item, targetPrice: depop.listPrice }, settings);
+  const atOffer = calc({ ...item, targetPrice: depop.minOfferPrice || depop.listPrice }, settings);
+  const buy = (Number(item.purchasePrice) || 0) + (Number(item.inboundShipping) || 0);
+  const cls = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
+  return `<div class="pricing">
+    <div><span>Buy on eBay for</span><strong>${money(buy)}</strong><small>${money(item.purchasePrice)} + ${money(item.inboundShipping)} shipping</small></div>
+    <div><span>List on Depop at</span><strong>${money(depop.listPrice)}</strong><small>accept offers from ${money(depop.minOfferPrice)}</small></div>
+    <div><span>Your profit</span><strong class="${cls(atList.profit)}">${signedMoney(atList.profit)}</strong><small>${signedMoney(atOffer.profit)} at lowest offer · after fees + shipping</small></div>
+  </div>`;
 }
