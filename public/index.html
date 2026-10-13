@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090b0a" />
+  <title>FlipLab — Automated Flipping</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">F</div><div><strong>FlipLab</strong><span>Automated Flipping</span></div></div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Dashboard</button>
+        <button class="nav-item" data-view="scanner"><span>✦</span> AI Scanner</button>
+        <button class="nav-item" data-view="inventory"><span>▦</span> Inventory</button>
+        <button class="nav-item" data-view="sources"><span>⌕</span> Sources</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="status-dot"><i id="healthDot"></i><span id="healthText">Connecting…</span></div>
+        <p>Built for sourcing, scoring & listing prep.</p>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">RESELLER OPERATING SYSTEM</p><h1 id="pageTitle">Dashboard</h1></div>
+        <button class="primary compact" data-go="scanner">+ Scan an item</button>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <div class="hero">
+          <div>
+            <span class="pill">AI-assisted · human-controlled</span>
+            <h2>Find the spread.<br><em>Keep the margin.</em></h2>
+            <p>Turn a thrift find into a buy/pass decision, listing draft, and tracked inventory in one workflow.</p>
+            <button class="primary" data-go="scanner">Analyze your first flip →</button>
+          </div>
+          <div class="hero-orbit"><div class="orbit-card"><span>FLIP SCORE</span><strong id="heroScore">—</strong><small>latest item</small></div></div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric"><span>Tracked items</span><strong id="mItems">0</strong><small>inventory + watchlist</small></article>
+          <article class="metric"><span>Capital at work</span><strong id="mCapital">$0</strong><small>landed cost</small></article>
+          <article class="metric"><span>Projected profit</span><strong id="mProfit">$0</strong><small>at target prices</small></article>
+          <article class="metric"><span>Average score</span><strong id="mScore">—</strong><small>AI + unit economics</small></article>
+        </div>
+
+        <div class="two-col">
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">PIPELINE</p><h3>Recent flips</h3></div><button class="text-btn" data-go="inventory">View all →</button></div><div id="recentItems" class="empty-state">No items yet. Scan one and start your pipeline.</div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">PLAYBOOK</p><h3>The system</h3></div></div>
+            <ol class="playbook"><li><b>Source</b><span>Find underpriced inventory</span></li><li><b>Score</b><span>Analyze margin, demand & risk</span></li><li><b>Verify</b><span>Check condition and real sold comps</span></li><li><b>List</b><span>Use AI-prepared copy, then publish manually</span></li><li><b>Track</b><span>Record status, cost and projected profit</span></li></ol>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-scanner">
+        <div class="scanner-grid">
+          <form class="panel scanner-form" id="scanForm">
+            <div class="panel-head"><div><p class="eyebrow">INPUT</p><h3>Potential flip</h3></div><span class="pill subtle">No scraping</span></div>
+            <label class="dropzone" id="dropzone"><input id="imageInput" type="file" accept="image/*" hidden><img id="imagePreview" alt="Item preview"><div id="dropCopy"><strong>Drop a photo here</strong><span>or click to upload · JPG/PNG/WEBP</span></div></label>
+            <div class="form-grid">
+              <label class="wide">Item title<input name="title" placeholder="e.g. Vintage Carhartt Detroit Jacket"></label>
+              <label>Brand<input name="brand" placeholder="Carhartt"></label>
+              <label>Category<input name="category" placeholder="Jacket"></label>
+              <label>Size<input name="size" placeholder="L"></label>
+              <label>Source<select name="source"><option>manual</option><option>thrift</option><option>ShopGoodwill</option><option>eBay</option><option>Facebook Marketplace</option><option>garage sale</option></select></label>
+              <label class="wide">Source URL<input name="sourceUrl" type="url" placeholder="https://…"></label>
+              <label>Item cost<input name="purchasePrice" type="number" min="0" step="0.01" placeholder="25"></label>
+              <label>Inbound shipping<input name="inboundShipping" type="number" min="0" step="0.01" value="0"></label>
+              <label>Cleaning / repair<input name="repairCost" type="number" min="0" step="0.01" value="0"></label>
+              <label>Target sale price<input name="targetPrice" type="number" min="0" step="0.01" placeholder="85"></label>
+              <label>Outbound shipping<input name="outboundShipping" type="number" min="0" step="0.01" value="0"></label>
+              <label class="wide">Notes<textarea name="notes" rows="3" placeholder="Condition, measurements, flaws, material, era clues…"></textarea></label>
+            </div>
+            <div class="form-actions"><button class="primary" id="analyzeBtn" type="submit">✦ Analyze flip</button><span id="scanHint">Add a photo + cost for the strongest result.</span></div>
+          </form>
+
+          <aside class="panel result-panel" id="resultPanel">
+            <div class="result-placeholder"><div class="spark">✦</div><h3>Your flip report appears here</h3><p>AI will estimate a sale range, score risk and demand, calculate max buy price, and draft your listing.</p></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-inventory">
+        <article class="panel inventory-panel">
+          <div class="panel-head"><div><p class="eyebrow">PIPELINE</p><h3>Inventory & watchlist</h3></div><div class="filters"><select id="statusFilter"><option value="all">All statuses</option><option value="watching">Watching</option><option value="bought">Bought</option><option value="listed">Listed</option><option value="sold">Sold</option><option value="passed">Passed</option></select></div></div>
+          <div id="inventoryTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-sources">
+        <div class="section-intro"><p class="eyebrow">SOURCING</p><h2>Where to hunt</h2><p>Use these as discovery lanes. This app intentionally does not scrape Depop or automate actions that can violate marketplace rules.</p></div>
+        <div class="source-grid" id="sourceGrid"></div>
+        <article class="panel guardrail"><strong>Automation rule</strong><p>Automate analysis, math, inventory, image understanding and copy generation. Keep marketplace research and final publishing human-controlled unless you have an approved official API integration.</p></article>
+      </section>
+
+      <section class="view" id="view-settings">
+        <article class="panel settings-card">
+          <div class="panel-head"><div><p class="eyebrow">ECONOMICS</p><h3>Default assumptions</h3></div></div>
+          <form id="settingsForm" class="form-grid">
+            <label>Marketplace fee %<input name="marketplaceFeePercent" type="number" min="0" step="0.1"></label>
+            <label>Payment processing %<input name="paymentFeePercent" type="number" min="0" step="0.1"></label>
+            <label>Default outbound shipping<input name="defaultOutboundShipping" type="number" min="0" step="0.01"></label>
+            <label>Target ROI %<input name="targetRoiPercent" type="number" min="0" step="1"></label>
+            <div class="wide"><button class="primary" type="submit">Save settings</button></div>
+          </form>
+          <div class="config-note"><h4>AI configuration</h4><p>Add <code>OPENAI_API_KEY</code> as a Codespaces secret for hosted AI. Or set <code>AI_PROVIDER=ollama</code> and run an Ollama vision model locally. Secrets never belong in this repository.</p></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
