@@ -7,7 +7,7 @@ import { searchListings, getListing, testEbay } from './lib/ebay.js';
 import { analyzeListing } from './lib/finder.js';
 import { publicAiConfig, saveAiConfig, validateAiPatch } from './lib/config.js';
 import { scrapeProduct, mergeScrapedItem } from './lib/scraper.js';
-import { huntItems } from './lib/hunt.js';
+import { startHuntJob, getHuntJob } from './lib/hunt.js';
 import { UPLOADS_DIR } from './lib/paths.js';
 import { httpError } from './lib/errors.js';
 import {
@@ -86,10 +86,16 @@ app.post('/api/scrape', async (req, res) => {
   res.json(await scrapeProduct(url));
 });
 
-// Natural-language sourcing: one prompt -> current listings across supported marketplaces.
-// This only discovers public listings. Opening/buying/publishing remains user-controlled.
+// AI Hunt runs as a short-lived server job so Codespaces/reverse proxies never have
+// to hold one HTTP request open while OpenAI searches the web.
 app.post('/api/hunt', async (req, res) => {
-  res.json(await huntItems(req.body?.prompt));
+  res.status(202).json(await startHuntJob(req.body?.prompt));
+});
+
+app.get('/api/hunt/:id', (req, res) => {
+  const job = getHuntJob(req.params.id);
+  if (!job) throw httpError(404, 'AI Hunt job expired or was not found. Run the hunt again.');
+  res.json(job);
 });
 
 app.post('/api/analyze', async (req, res) => {
