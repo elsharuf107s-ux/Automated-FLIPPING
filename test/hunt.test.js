@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isAllowedHuntUrl, normalizeHuntPrompt, HUNT_SOURCES } from '../lib/hunt.js';
+import { isAllowedHuntUrl, normalizeHuntPrompt, HUNT_SOURCES, getHuntJob } from '../lib/hunt.js';
 
 test('AI Hunt exposes a broad default marketplace set', () => {
   const names = HUNT_SOURCES.map((source) => source.name);
@@ -27,4 +27,8 @@ test('AI Hunt normalizes ordinary language prompts', () => {
     'find vintage Nike jackets under $40'
   );
   assert.throws(() => normalizeHuntPrompt('a'), /Tell AI Hunt/);
+});
+
+test('AI Hunt job lookup returns null for unknown or expired jobs', () => {
+  assert.equal(getHuntJob('not-a-real-job'), null);
 });
