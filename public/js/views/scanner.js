@@ -6,7 +6,7 @@ import { scanEconHtml, aiReportHtml, depopHtml, depopText } from '../report.js';
 
 const DRAFT_KEY = 'fliplab-scan-draft';
 const MONEY_FIELDS = ['purchasePrice', 'inboundShipping', 'repairCost', 'targetPrice', 'outboundShipping'];
-const LOADING_STEPS = ['Reading the photo…', 'Weighing brand and condition…', 'Estimating the resale range…', 'Running the unit economics…', 'Drafting listing copy…'];
+const LOADING_STEPS = ['Opening the source page…', 'Extracting product details…', 'Reading the photo…', 'Weighing brand and condition…', 'Estimating the resale range…', 'Running the unit economics…', 'Drafting listing copy…'];
 
 const scan = { image: '', analysis: null, savedId: null, loadingTimer: null };
 const form = () => $('#scanForm');
@@ -59,12 +59,33 @@ async function takeFile(file) {
   }
 }
 
+function applyScrapedProduct(webScrape) {
+  const p = webScrape?.product;
+  if (!p) return false;
+  const f = form();
+  const fill = (name, value) => {
+    const field = f.elements[name];
+    if (field && !field.value && value !== undefined && value !== null && String(value).trim()) field.value = value;
+  };
+  fill('title', p.title);
+  fill('brand', p.brand);
+  fill('category', p.category);
+  fill('size', p.size);
+  if (!num(f.elements.purchasePrice.value) && Number(p.price) > 0) f.elements.purchasePrice.value = p.price;
+  if (!f.elements.notes.value && p.description) f.elements.notes.value = p.description;
+  if (!scan.image && Array.isArray(p.images) && p.images[0]) setImage(p.images[0]);
+  renderScanEcon();
+  saveDraft();
+  return true;
+}
+
 function placeholderHtml() {
   return `<div class="result-empty">
     <div class="spark">${icon('spark')}</div>
     <h3>Your flip report appears here</h3>
-    <p>Add what you know about the item — a photo helps most — then analyze.</p>
+    <p>Add a photo, item details, or paste a product/listing URL. FlipLab can scrape the URL with your OpenAI key before scoring it.</p>
     <ul class="result-features">
+      <li>${icon('check')}AI webpage extraction from a Source URL</li>
       <li>${icon('check')}Estimated resale range and max buy price</li>
       <li>${icon('check')}Flip score with demand and risk</li>
       <li>${icon('check')}Listing title, description and keywords</li>
@@ -117,9 +138,9 @@ async function analyze(event) {
   const f = form();
   if (!f.reportValidity()) return;
   const item = readForm();
-  if (!item.title && !item.brand && !item.category && !item.image) {
-    toast('Add a title, brand, category or photo first.', { type: 'error' });
-    f.elements.title.focus();
+  if (!item.title && !item.brand && !item.category && !item.image && !item.sourceUrl) {
+    toast('Add a title, brand, category, photo, or Source URL first.', { type: 'error' });
+    f.elements.sourceUrl?.focus();
     return;
   }
   const btn = $('#analyzeBtn');
@@ -128,6 +149,7 @@ async function analyze(event) {
   if (matchMedia('(max-width: 1180px)').matches) $('#resultPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
     const analysis = await api('/api/analyze', { body: item });
+    const scraped = applyScrapedProduct(analysis.webScrape);
     scan.analysis = analysis;
     scan.savedId = null;
     if (!item.targetPrice && analysis.estimatedSaleHigh) {
@@ -137,7 +159,7 @@ async function analyze(event) {
     }
     renderResult();
     const label = { openai: 'AI report ready', ollama: 'Local AI report ready' }[analysis.mode] || 'Demo report ready';
-    toast(analysis.warning ? 'AI unavailable — showing demo scoring' : label, { type: analysis.warning ? 'info' : 'success' });
+    toast(analysis.warning ? 'AI unavailable — showing demo scoring' : scraped ? 'Page scraped + AI report ready' : label, { type: analysis.warning ? 'info' : 'success' });
   } catch (error) {
     $('#resultPanel').innerHTML = `<div class="result-empty"><div class="spark">${icon('alert')}</div><h3>Analysis failed</h3><p>${esc(error.message)}</p></div>`;
     toast(error.message, { type: 'error' });
@@ -155,10 +177,7 @@ async function save(btn) {
     const item = await createItem(payload);
     scan.savedId = item.id;
     renderResult();
-    toast('Saved to inventory', {
-      type: 'success',
-      action: { label: 'Scan another', onClick: () => reset() }
-    });
+    toast('Saved to inventory', { type: 'success', action: { label: 'Scan another', onClick: () => reset() } });
   } catch (error) {
     toast(error.message, { type: 'error' });
     busy(btn, false);
@@ -183,10 +202,7 @@ export function initScanner() {
   $('#resultPanel').innerHTML = placeholderHtml();
 
   f.addEventListener('submit', analyze);
-  f.addEventListener('input', () => {
-    renderScanEcon();
-    saveDraft();
-  });
+  f.addEventListener('input', () => { renderScanEcon(); saveDraft(); });
   f.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) analyze(event);
   });
@@ -214,7 +230,6 @@ export function initScanner() {
     event.preventDefault();
     takeFile([...event.dataTransfer.files].find((file) => file.type.startsWith('image/')));
   });
-  // Paste a screenshot or copied image straight into the scanner.
   document.addEventListener('paste', (event) => {
     if (!$('#view-scanner').classList.contains('active')) return;
     const file = [...(event.clipboardData?.files || [])].find((entry) => entry.type.startsWith('image/'));
@@ -235,7 +250,6 @@ export function initScanner() {
   });
 }
 
-// Called once settings load: fill defaults the user hasn't typed over.
 export function applyScannerDefaults() {
   const ship = form().elements.outboundShipping;
   if (!ship.value && num(state.settings.defaultOutboundShipping)) ship.value = state.settings.defaultOutboundShipping;

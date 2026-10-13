@@ -6,6 +6,7 @@ import { analyzeItem, testConnection } from './lib/ai.js';
 import { searchListings, getListing, testEbay } from './lib/ebay.js';
 import { analyzeListing } from './lib/finder.js';
 import { publicAiConfig, saveAiConfig, validateAiPatch } from './lib/config.js';
+import { scrapeProduct, mergeScrapedItem } from './lib/scraper.js';
 import { UPLOADS_DIR } from './lib/paths.js';
 import { httpError } from './lib/errors.js';
 import {
@@ -28,19 +29,11 @@ app.use((_req, res, next) => {
 });
 app.use(express.json({ limit: '8mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-// Upload names are unique per photo, so browsers can cache them forever.
 app.use('/uploads', express.static(UPLOADS_DIR, { immutable: true, maxAge: '365d', fallthrough: false }));
 
 app.get('/api/health', async (_req, res) => {
   const ai = await publicAiConfig();
-  res.json({
-    ok: true,
-    app: 'Automated Flipping',
-    version: pkg.version,
-    aiProvider: ai.provider,
-    aiConfigured: ai.configured,
-    ai
-  });
+  res.json({ ok: true, app: 'Automated Flipping', version: pkg.version, aiProvider: ai.provider, aiConfigured: ai.configured, ai });
 });
 
 app.get('/api/items', async (_req, res) => {
@@ -68,20 +61,60 @@ app.delete('/api/items/:id', async (req, res) => {
   res.status(204).end();
 });
 
-// Re-run the AI on a saved item (uses its stored photo) and keep the new report.
 app.post('/api/items/:id/analyze', async (req, res) => {
   const item = await getItem(req.params.id);
   if (!item) throw httpError(404, 'Item not found');
-  const ai = await analyzeItem({ ...item, image: await imageAsDataUrl(item.image) });
+  let enriched = { ...item, image: await imageAsDataUrl(item.image) };
+  let scrape = null;
+  if (item.sourceUrl) {
+    try {
+      scrape = await scrapeProduct(item.sourceUrl);
+      enriched = mergeScrapedItem(enriched, scrape);
+    } catch (error) {
+      enriched.notes = [enriched.notes, `Web scrape warning: ${error.message}`].filter(Boolean).join('\n\n').slice(0, 4000);
+    }
+  }
+  const ai = await analyzeItem(enriched);
+  if (scrape) ai.webScrape = { engine: scrape.engine, model: scrape.model, scrapedAt: scrape.scrapedAt, product: scrape.product };
   res.json(await updateItem(item.id, { ai }));
 });
 
+app.post('/api/scrape', async (req, res) => {
+  const url = String(req.body?.url || req.body?.sourceUrl || '').trim();
+  if (!url) throw httpError(400, 'Provide a product/listing URL.');
+  res.json(await scrapeProduct(url));
+});
+
 app.post('/api/analyze', async (req, res) => {
-  const item = req.body || {};
-  if (!item.title && !item.brand && !item.category && !item.image) {
-    throw httpError(400, 'Add a title, brand, category, or photo first.');
+  let item = req.body || {};
+  let scrape = null;
+
+  if (item.sourceUrl) {
+    try {
+      scrape = await scrapeProduct(item.sourceUrl);
+      item = mergeScrapedItem(item, scrape);
+    } catch (error) {
+      const hasManualInput = item.title || item.brand || item.category || item.image;
+      if (!hasManualInput) throw error;
+      item = { ...item, notes: [item.notes, `Web scrape warning: ${error.message}`].filter(Boolean).join('\n\n').slice(0, 4000) };
+    }
   }
-  res.json(await analyzeItem({ ...item, image: await imageAsDataUrl(item.image) }));
+
+  if (!item.title && !item.brand && !item.category && !item.image) {
+    throw httpError(400, 'Add a title, brand, category, photo, or Source URL first.');
+  }
+
+  const analysis = await analyzeItem({ ...item, image: await imageAsDataUrl(item.image) });
+  if (scrape) {
+    analysis.webScrape = {
+      engine: scrape.engine,
+      model: scrape.model,
+      scrapedAt: scrape.scrapedAt,
+      sourceUrl: scrape.sourceUrl,
+      product: scrape.product
+    };
+  }
+  res.json(analysis);
 });
 
 app.get('/api/settings', async (_req, res) => {
@@ -92,7 +125,6 @@ app.patch('/api/settings', async (req, res) => {
   res.json(await saveSettings(req.body || {}));
 });
 
-// AI provider + API keys. Keys are write-only: responses only ever include a masked preview.
 app.get('/api/ai-config', async (_req, res) => {
   res.json(await publicAiConfig());
 });
@@ -106,7 +138,6 @@ app.post('/api/ai-config/test', async (req, res) => {
   res.json(req.body?.target === 'ebay' ? await testEbay(draft) : await testConnection(draft));
 });
 
-// Deal finder (eBay Browse API). Finds listings; buying and listing stay with you.
 app.post('/api/finder/search', async (req, res) => {
   res.json(await searchListings(req.body || {}));
 });
@@ -144,7 +175,6 @@ function csvCell(value) {
   if (value == null) return '';
   if (typeof value === 'number') return String(Math.round(value * 100) / 100);
   let text = String(value);
-  // Stop spreadsheet apps from treating text cells as formulas.
   if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
