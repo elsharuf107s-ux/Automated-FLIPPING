@@ -8,6 +8,7 @@ import { initDrawer, openDrawer, requestClose, isDrawerOpen, syncDrawer } from '
 import { initSources, loadSources } from './js/views/sources.js';
 import { initSettings, fillAiForm, fillSettingsForm, renderAiStatus, syncThemeChoice } from './js/views/settings.js';
 import { initFinder, renderFinder, loadSavedSearches, isReportOpen, closeReport } from './js/views/finder.js';
+import { initHunt } from './js/views/hunt.js';
 
 const VIEWS = ['dashboard', 'finder', 'scanner', 'inventory', 'sources', 'settings'];
 const RENDERERS = { dashboard: renderDashboard, finder: renderFinder, inventory: renderInventory, scanner: renderScanEcon };
@@ -92,7 +93,6 @@ function onStateChange() {
 }
 
 /* ---------- Global interactions ---------- */
-// Navigate, then run `fn` once the target view is visible (focus fails on hidden fields).
 function goThen(hash, fn) {
   if (location.hash === hash) {
     fn();
@@ -132,13 +132,11 @@ function bindGlobal() {
     goThen('#/inventory', focusInventorySearch);
   });
 
-  // Rows anywhere (dashboard lists) open the item drawer.
   document.addEventListener('click', (event) => {
     const row = event.target.closest('[data-open]');
     if (row) location.hash = `#/inventory/${row.dataset.open}`;
   });
 
-  // Any [data-copy="elementId"] button copies that element's text.
   document.addEventListener('click', async (event) => {
     const button = event.target.closest('[data-copy]');
     if (!button) return;
@@ -155,7 +153,6 @@ function bindGlobal() {
     }, 1400);
   });
 
-  // Pick up changes made in another tab when coming back to this one.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && ready) loadItems().catch(() => {});
   });
@@ -174,6 +171,7 @@ async function init() {
   initDrawer();
   initSources();
   initFinder();
+  initHunt();
   initSettings({ onThemeChange: setTheme, currentTheme: themePref() });
   subscribe(onStateChange);
   showSkeletons();
