@@ -1,123 +1,310 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#090b0a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0c0b" />
+  <meta name="description" content="FlipLab — AI-assisted sourcing, flip scoring, inventory and listing workspace for resellers." />
   <title>FlipLab — Automated Flipping</title>
+  <script>
+    // Apply the saved theme before first paint so there is no flash.
+    try {
+      const pref = localStorage.getItem('fliplab-theme') || 'dark';
+      const dark = pref === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : pref !== 'light';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch {}
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23b9ff66'/%3E%3Cpath d='M11 23V9h11M11 16h8' stroke='%230b1006' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="noise"></div>
-  <div class="app-shell">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11.5h13V9"/><path d="M10 20.5v-6h4v6"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
+      <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 7.5 12 3 3 7.5v9L12 21l9-4.5z"/><path d="M3 7.5 12 12l9-4.5"/><path d="M12 12v9"/></symbol>
+      <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16.5 6.5l3 3M14 9l2 2"/></symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1Q11.3 5 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5a6.6 6.6 0 0 0 10 10z"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.2v.3"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.8v.2"/></symbol>
+      <symbol id="i-trend" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="17" height="11" rx="2.5"/><circle cx="16.5" cy="13.5" r="1.2"/></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8.5 8.5-9 9z"/><circle cx="8" cy="8" r="1.5"/></symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M4.5 18a9 9 0 1 1 15 0"/><path d="m12 13.5 4-5"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+      <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
+      <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5-5 4 4 2.5-2.5L20 19"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5 4.5 14H11l-1 7.5L19.5 10H13z"/></symbol>
+    </defs>
+  </svg>
+
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">F</div><div><strong>FlipLab</strong><span>Automated Flipping</span></div></div>
-      <nav id="nav">
-        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Dashboard</button>
-        <button class="nav-item" data-view="scanner"><span>✦</span> AI Scanner</button>
-        <button class="nav-item" data-view="inventory"><span>▦</span> Inventory</button>
-        <button class="nav-item" data-view="sources"><span>⌕</span> Sources</button>
-        <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+      <a class="brand" href="#/dashboard" aria-label="FlipLab home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M11 23V9h11M11 16h8"/></svg></span>
+        <span class="brand-text"><strong>FlipLab</strong><small>Automated Flipping</small></span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a class="nav-item" href="#/dashboard" data-view="dashboard"><svg class="i"><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a class="nav-item" href="#/scanner" data-view="scanner"><svg class="i"><use href="#i-spark"/></svg><span>AI Scanner</span></a>
+        <a class="nav-item" href="#/inventory" data-view="inventory"><svg class="i"><use href="#i-box"/></svg><span>Inventory</span><em class="nav-count" id="navCount" hidden>0</em></a>
+        <a class="nav-item" href="#/sources" data-view="sources"><svg class="i"><use href="#i-compass"/></svg><span>Sources</span></a>
+        <a class="nav-item" href="#/settings" data-view="settings"><svg class="i"><use href="#i-sliders"/></svg><span>Settings</span></a>
       </nav>
       <div class="sidebar-foot">
-        <div class="status-dot"><i id="healthDot"></i><span id="healthText">Connecting…</span></div>
-        <p>Built for sourcing, scoring & listing prep.</p>
+        <a class="ai-card" href="#/settings" id="aiCard" title="AI provider settings">
+          <span class="ai-dot" id="aiDot"></span>
+          <span class="ai-text"><strong id="aiName">Connecting…</strong><small id="aiModel">checking server</small></span>
+        </a>
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Switch theme"><svg class="i"><use href="#i-sun"/></svg></button>
       </div>
     </aside>
 
-    <main>
+    <main class="main" id="main" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow">RESELLER OPERATING SYSTEM</p><h1 id="pageTitle">Dashboard</h1></div>
-        <button class="primary compact" data-go="scanner">+ Scan an item</button>
+        <div><p class="eyebrow" id="pageEyebrow">Overview</p><h1 id="pageTitle">Dashboard</h1></div>
+        <div class="topbar-actions">
+          <a class="btn btn-ghost hide-sm" href="#/inventory" id="topSearchBtn" title="Search inventory (/)"><svg class="i"><use href="#i-search"/></svg><span>Search</span><kbd>/</kbd></a>
+          <a class="btn btn-primary" href="#/scanner" title="New scan (N)"><svg class="i"><use href="#i-plus"/></svg><span>New scan</span></a>
+        </div>
       </header>
 
-      <section class="view active" id="view-dashboard">
+      <!-- DASHBOARD -->
+      <section class="view" id="view-dashboard" data-title="Dashboard" data-eyebrow="Overview">
         <div class="hero">
-          <div>
-            <span class="pill">AI-assisted · human-controlled</span>
+          <div class="hero-copy">
+            <span class="pill"><svg class="i"><use href="#i-bolt"/></svg>AI-assisted · human-controlled</span>
             <h2>Find the spread.<br><em>Keep the margin.</em></h2>
             <p>Turn a thrift find into a buy/pass decision, listing draft, and tracked inventory in one workflow.</p>
-            <button class="primary" data-go="scanner">Analyze your first flip →</button>
-          </div>
-          <div class="hero-orbit"><div class="orbit-card"><span>FLIP SCORE</span><strong id="heroScore">—</strong><small>latest item</small></div></div>
-        </div>
-
-        <div class="metric-grid">
-          <article class="metric"><span>Tracked items</span><strong id="mItems">0</strong><small>inventory + watchlist</small></article>
-          <article class="metric"><span>Capital at work</span><strong id="mCapital">$0</strong><small>landed cost</small></article>
-          <article class="metric"><span>Projected profit</span><strong id="mProfit">$0</strong><small>at target prices</small></article>
-          <article class="metric"><span>Average score</span><strong id="mScore">—</strong><small>AI + unit economics</small></article>
-        </div>
-
-        <div class="two-col">
-          <article class="panel"><div class="panel-head"><div><p class="eyebrow">PIPELINE</p><h3>Recent flips</h3></div><button class="text-btn" data-go="inventory">View all →</button></div><div id="recentItems" class="empty-state">No items yet. Scan one and start your pipeline.</div></article>
-          <article class="panel"><div class="panel-head"><div><p class="eyebrow">PLAYBOOK</p><h3>The system</h3></div></div>
-            <ol class="playbook"><li><b>Source</b><span>Find underpriced inventory</span></li><li><b>Score</b><span>Analyze margin, demand & risk</span></li><li><b>Verify</b><span>Check condition and real sold comps</span></li><li><b>List</b><span>Use AI-prepared copy, then publish manually</span></li><li><b>Track</b><span>Record status, cost and projected profit</span></li></ol>
-          </article>
-        </div>
-      </section>
-
-      <section class="view" id="view-scanner">
-        <div class="scanner-grid">
-          <form class="panel scanner-form" id="scanForm">
-            <div class="panel-head"><div><p class="eyebrow">INPUT</p><h3>Potential flip</h3></div><span class="pill subtle">No scraping</span></div>
-            <label class="dropzone" id="dropzone"><input id="imageInput" type="file" accept="image/*" hidden><img id="imagePreview" alt="Item preview"><div id="dropCopy"><strong>Drop a photo here</strong><span>or click to upload · JPG/PNG/WEBP</span></div></label>
-            <div class="form-grid">
-              <label class="wide">Item title<input name="title" placeholder="e.g. Vintage Carhartt Detroit Jacket"></label>
-              <label>Brand<input name="brand" placeholder="Carhartt"></label>
-              <label>Category<input name="category" placeholder="Jacket"></label>
-              <label>Size<input name="size" placeholder="L"></label>
-              <label>Source<select name="source"><option>manual</option><option>thrift</option><option>ShopGoodwill</option><option>eBay</option><option>Facebook Marketplace</option><option>garage sale</option></select></label>
-              <label class="wide">Source URL<input name="sourceUrl" type="url" placeholder="https://…"></label>
-              <label>Item cost<input name="purchasePrice" type="number" min="0" step="0.01" placeholder="25"></label>
-              <label>Inbound shipping<input name="inboundShipping" type="number" min="0" step="0.01" value="0"></label>
-              <label>Cleaning / repair<input name="repairCost" type="number" min="0" step="0.01" value="0"></label>
-              <label>Target sale price<input name="targetPrice" type="number" min="0" step="0.01" placeholder="85"></label>
-              <label>Outbound shipping<input name="outboundShipping" type="number" min="0" step="0.01" value="0"></label>
-              <label class="wide">Notes<textarea name="notes" rows="3" placeholder="Condition, measurements, flaws, material, era clues…"></textarea></label>
+            <div class="hero-actions">
+              <a class="btn btn-primary btn-lg" href="#/scanner">Analyze a flip <svg class="i"><use href="#i-chevron"/></svg></a>
+              <a class="btn btn-ghost btn-lg" href="#/inventory">Open inventory</a>
             </div>
-            <div class="form-actions"><button class="primary" id="analyzeBtn" type="submit">✦ Analyze flip</button><span id="scanHint">Add a photo + cost for the strongest result.</span></div>
+          </div>
+          <div class="hero-visual" id="heroVisual" aria-live="polite"></div>
+        </div>
+
+        <div class="kpi-grid" id="kpis"></div>
+
+        <div id="dashBody"></div>
+      </section>
+
+      <!-- SCANNER -->
+      <section class="view" id="view-scanner" data-title="AI Scanner" data-eyebrow="Score a potential flip">
+        <div class="scanner">
+          <form class="panel scan-form" id="scanForm" autocomplete="off">
+            <div class="panel-head">
+              <div><p class="eyebrow">Input</p><h3>Potential flip</h3></div>
+              <button class="btn btn-ghost btn-sm" type="button" id="scanReset"><svg class="i"><use href="#i-refresh"/></svg>Clear</button>
+            </div>
+
+            <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Add a photo">
+              <input id="imageInput" type="file" accept="image/*" hidden>
+              <img id="imagePreview" alt="Item preview">
+              <div class="drop-copy">
+                <span class="drop-icon"><svg class="i"><use href="#i-camera"/></svg></span>
+                <strong>Drop, paste or click to add a photo</strong>
+                <span>JPG · PNG · WEBP — compressed in your browser</span>
+              </div>
+              <button class="icon-btn drop-remove" type="button" id="imageRemove" aria-label="Remove photo"><svg class="i"><use href="#i-x"/></svg></button>
+            </div>
+
+            <fieldset class="fieldset">
+              <legend>Item</legend>
+              <div class="form-grid">
+                <label class="wide">Item title<input name="title" placeholder="e.g. Vintage Carhartt Detroit Jacket" maxlength="140"></label>
+                <label>Brand<input name="brand" placeholder="Carhartt" maxlength="80"></label>
+                <label>Category<input name="category" placeholder="Jacket" maxlength="80" list="categoryList"></label>
+                <label>Size<input name="size" placeholder="L" maxlength="40"></label>
+                <label>Condition<select name="condition"><option value="">Not set</option><option>New with tags</option><option>Like new</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Needs repair</option></select></label>
+                <label>Source<select name="source"><option>manual</option><option>thrift</option><option>ShopGoodwill</option><option>eBay</option><option>Facebook Marketplace</option><option>garage sale</option><option>estate sale</option></select></label>
+                <label>Source URL<input name="sourceUrl" type="url" placeholder="https://…" maxlength="500"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="fieldset">
+              <legend>Costs &amp; price</legend>
+              <div class="form-grid cols-3">
+                <label>Item cost<span class="money-input"><input name="purchasePrice" type="number" min="0" step="0.01" placeholder="25" inputmode="decimal"></span></label>
+                <label>Inbound shipping<span class="money-input"><input name="inboundShipping" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
+                <label>Cleaning / repair<span class="money-input"><input name="repairCost" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
+                <label>Target sale price<span class="money-input"><input name="targetPrice" type="number" min="0" step="0.01" placeholder="AI suggests" inputmode="decimal"></span></label>
+                <label>Outbound shipping<span class="money-input"><input name="outboundShipping" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
+              </div>
+              <div class="econ-strip" id="scanEcon"></div>
+            </fieldset>
+
+            <fieldset class="fieldset">
+              <legend>Notes</legend>
+              <textarea name="notes" rows="3" maxlength="4000" placeholder="Condition, measurements, flaws, material, era clues…" aria-label="Notes"></textarea>
+            </fieldset>
+
+            <div class="form-actions">
+              <button class="btn btn-primary btn-lg" id="analyzeBtn" type="submit"><svg class="i"><use href="#i-spark"/></svg><span>Analyze flip</span></button>
+              <span class="hint" id="scanHint">Add a photo + cost for the strongest result. <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+            </div>
+            <datalist id="categoryList"><option>Jacket</option><option>Coat</option><option>Jeans</option><option>Pants</option><option>T-shirt</option><option>Sweatshirt</option><option>Hoodie</option><option>Sweater</option><option>Shirt</option><option>Dress</option><option>Skirt</option><option>Shoes</option><option>Sneakers</option><option>Boots</option><option>Bag</option><option>Hat</option><option>Accessories</option></datalist>
           </form>
 
-          <aside class="panel result-panel" id="resultPanel">
-            <div class="result-placeholder"><div class="spark">✦</div><h3>Your flip report appears here</h3><p>AI will estimate a sale range, score risk and demand, calculate max buy price, and draft your listing.</p></div>
-          </aside>
+          <aside class="panel result" id="resultPanel" aria-live="polite"></aside>
         </div>
       </section>
 
-      <section class="view" id="view-inventory">
-        <article class="panel inventory-panel">
-          <div class="panel-head"><div><p class="eyebrow">PIPELINE</p><h3>Inventory & watchlist</h3></div><div class="filters"><select id="statusFilter"><option value="all">All statuses</option><option value="watching">Watching</option><option value="bought">Bought</option><option value="listed">Listed</option><option value="sold">Sold</option><option value="passed">Passed</option></select></div></div>
-          <div id="inventoryTable"></div>
+      <!-- INVENTORY -->
+      <section class="view" id="view-inventory" data-title="Inventory" data-eyebrow="Pipeline">
+        <article class="panel inventory">
+          <div class="inv-toolbar">
+            <div class="chips" id="statusChips" role="tablist" aria-label="Filter by status"></div>
+            <div class="inv-tools">
+              <label class="search-field"><svg class="i"><use href="#i-search"/></svg><input id="invSearch" type="search" placeholder="Search title, brand, notes…" aria-label="Search inventory"></label>
+              <select id="invSort" aria-label="Sort inventory">
+                <option value="updated">Recently updated</option>
+                <option value="score">Highest score</option>
+                <option value="profit">Highest profit</option>
+                <option value="roi">Highest ROI</option>
+                <option value="cost">Highest cost</option>
+                <option value="title">Title A–Z</option>
+              </select>
+              <a class="btn btn-ghost" href="/api/export.csv" download><svg class="i"><use href="#i-download"/></svg><span>CSV</span></a>
+            </div>
+          </div>
+          <div class="inv-summary" id="invSummary"></div>
+          <div id="inventoryList"></div>
         </article>
       </section>
 
-      <section class="view" id="view-sources">
-        <div class="section-intro"><p class="eyebrow">SOURCING</p><h2>Where to hunt</h2><p>Use these as discovery lanes. This app intentionally does not scrape Depop or automate actions that can violate marketplace rules.</p></div>
+      <!-- SOURCES -->
+      <section class="view" id="view-sources" data-title="Sources" data-eyebrow="Sourcing">
+        <div class="section-intro">
+          <h2>Where to hunt</h2>
+          <p>Discovery lanes and quick comp searches. FlipLab intentionally does not scrape marketplaces or automate actions that can violate their rules — these open in a new tab for you to verify by hand.</p>
+        </div>
+        <form class="panel comps" id="compsForm">
+          <div class="panel-head"><div><p class="eyebrow">Comp check</p><h3>Search real sold listings</h3></div></div>
+          <div class="comps-row">
+            <label class="search-field grow"><svg class="i"><use href="#i-search"/></svg><input id="compsQuery" type="search" placeholder="e.g. carhartt detroit jacket blanket lined" aria-label="Comp search query" required></label>
+            <button class="btn btn-primary" type="submit" data-engine="ebay">eBay sold <svg class="i"><use href="#i-external"/></svg></button>
+            <button class="btn btn-ghost" type="submit" data-engine="poshmark">Poshmark sold</button>
+            <button class="btn btn-ghost" type="submit" data-engine="depop">Depop</button>
+          </div>
+        </form>
         <div class="source-grid" id="sourceGrid"></div>
-        <article class="panel guardrail"><strong>Automation rule</strong><p>Automate analysis, math, inventory, image understanding and copy generation. Keep marketplace research and final publishing human-controlled unless you have an approved official API integration.</p></article>
+        <article class="panel guardrail">
+          <svg class="i"><use href="#i-info"/></svg>
+          <div><strong>Automation rule</strong><p>Automate analysis, math, inventory, image understanding and copy generation. Keep marketplace research and final publishing human-controlled unless you have an approved official API integration.</p></div>
+        </article>
       </section>
 
-      <section class="view" id="view-settings">
-        <article class="panel settings-card">
-          <div class="panel-head"><div><p class="eyebrow">ECONOMICS</p><h3>Default assumptions</h3></div></div>
-          <form id="settingsForm" class="form-grid">
-            <label>Marketplace fee %<input name="marketplaceFeePercent" type="number" min="0" step="0.1"></label>
-            <label>Payment processing %<input name="paymentFeePercent" type="number" min="0" step="0.1"></label>
-            <label>Default outbound shipping<input name="defaultOutboundShipping" type="number" min="0" step="0.01"></label>
-            <label>Target ROI %<input name="targetRoiPercent" type="number" min="0" step="1"></label>
-            <div class="wide"><button class="primary" type="submit">Save settings</button></div>
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings" data-title="Settings" data-eyebrow="Configuration">
+        <div class="settings-grid">
+          <form class="panel" id="aiForm" autocomplete="off">
+            <div class="panel-head"><div><p class="eyebrow">AI provider</p><h3>Analysis engine &amp; API keys</h3></div><span class="status-chip" id="aiStatusChip"></span></div>
+
+            <div class="segmented" role="radiogroup" aria-label="AI provider">
+              <label><input type="radio" name="provider" value="openai"><span><strong>OpenAI</strong><small>Hosted vision</small></span></label>
+              <label><input type="radio" name="provider" value="ollama"><span><strong>Ollama</strong><small>Local / open model</small></span></label>
+              <label><input type="radio" name="provider" value="demo"><span><strong>Demo</strong><small>Offline scorer</small></span></label>
+            </div>
+
+            <div class="provider-fields" data-provider="openai">
+              <label>OpenAI API key
+                <span class="key-field">
+                  <svg class="i"><use href="#i-key"/></svg>
+                  <input id="openaiKey" name="openaiApiKey" type="password" placeholder="sk-…" autocomplete="new-password" spellcheck="false" autocapitalize="off">
+                  <button class="icon-btn" type="button" id="keyReveal" aria-label="Show key"><svg class="i"><use href="#i-eye"/></svg></button>
+                </span>
+              </label>
+              <div class="key-status" id="keyStatus"></div>
+              <label>Model<input name="openaiModel" placeholder="gpt-6-luna" spellcheck="false"></label>
+            </div>
+
+            <div class="provider-fields" data-provider="ollama">
+              <label>Ollama server URL<input name="ollamaBaseUrl" type="url" placeholder="http://127.0.0.1:11434" spellcheck="false"></label>
+              <label>Vision model<input name="ollamaModel" placeholder="qwen2.5vl:3b" spellcheck="false"></label>
+              <p class="field-note">Run <code>ollama pull qwen2.5vl:3b</code> on the machine running Ollama. Small Codespaces can be slow for vision models.</p>
+            </div>
+
+            <div class="provider-fields" data-provider="demo">
+              <p class="field-note">The demo scorer runs offline using your costs, target price and listing completeness. No photo understanding — good for trying the workflow.</p>
+            </div>
+
+            <div class="test-result" id="aiTestResult" hidden></div>
+
+            <div class="form-actions split">
+              <button class="btn btn-ghost" type="button" id="aiTest"><svg class="i"><use href="#i-plug"/></svg><span>Test connection</span></button>
+              <button class="btn btn-primary" type="submit" id="aiSave"><span>Save AI settings</span></button>
+            </div>
+            <p class="field-note small"><svg class="i"><use href="#i-info"/></svg><span>Keys are stored only on this server in <code>data/ai-config.json</code> (git-ignored, owner-only permissions) and are never sent back to the browser. A key saved here overrides the <code>OPENAI_API_KEY</code> environment variable / Codespaces secret; remove it to fall back.</span></p>
           </form>
-          <div class="config-note"><h4>AI configuration</h4><p>Add <code>OPENAI_API_KEY</code> as a Codespaces secret for hosted AI. Or set <code>AI_PROVIDER=ollama</code> and run an Ollama vision model locally. Secrets never belong in this repository.</p></div>
-        </article>
+
+          <div class="settings-stack">
+            <form class="panel" id="settingsForm">
+              <div class="panel-head"><div><p class="eyebrow">Economics</p><h3>Default assumptions</h3></div></div>
+              <div class="form-grid">
+                <label>Marketplace fee<span class="unit-input" data-unit="%"><input name="marketplaceFeePercent" type="number" min="0" max="100" step="0.1"></span></label>
+                <label>Payment processing<span class="unit-input" data-unit="%"><input name="paymentFeePercent" type="number" min="0" max="100" step="0.1"></span></label>
+                <label>Default outbound shipping<span class="money-input"><input name="defaultOutboundShipping" type="number" min="0" step="0.01"></span></label>
+                <label>Target ROI<span class="unit-input" data-unit="%"><input name="targetRoiPercent" type="number" min="0" step="1"></span></label>
+              </div>
+              <p class="field-note">New items copy these fees. Target ROI drives the “max buy” number in the scanner.</p>
+              <div class="form-actions"><button class="btn btn-primary" type="submit">Save economics</button></div>
+            </form>
+
+            <div class="panel">
+              <div class="panel-head"><div><p class="eyebrow">Appearance</p><h3>Theme</h3></div></div>
+              <div class="segmented compact" role="radiogroup" aria-label="Theme" id="themeChoice">
+                <label><input type="radio" name="theme" value="dark"><span><strong>Dark</strong></span></label>
+                <label><input type="radio" name="theme" value="light"><span><strong>Light</strong></span></label>
+                <label><input type="radio" name="theme" value="system"><span><strong>System</strong></span></label>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><div><p class="eyebrow">Data</p><h3>Your inventory</h3></div></div>
+              <p class="field-note" id="dataNote">Inventory is stored on this server in <code>data/db.json</code>, photos in <code>data/uploads/</code>.</p>
+              <div class="form-actions"><a class="btn btn-ghost" href="/api/export.csv" download><svg class="i"><use href="#i-download"/></svg><span>Export CSV</span></a></div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden></aside>
+
+  <dialog class="modal" id="confirmModal">
+    <form method="dialog">
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmBody"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" value="cancel">Cancel</button>
+        <button class="btn btn-danger" value="ok" id="confirmOk">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
