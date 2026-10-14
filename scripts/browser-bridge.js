@@ -196,7 +196,8 @@ async function shutdown() {
   stopping = true;
   console.log('\n[FlipLab Agent] Stopping…');
   if (ownsContext) await context?.close().catch(() => {});
-  else await browser?.close().catch(() => {});
+  // In CDP mode we are attached to someone else's browser. Let process exit
+  // without sending Browser.close so the user's existing Chrome/Chromium stays open.
   process.exit(0);
 }
 
