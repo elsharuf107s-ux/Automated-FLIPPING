@@ -9,22 +9,25 @@ test('desktop window rectangles stay inside the workspace', () => {
   );
 });
 
-test('desktop layout opens hunt and scanner side by side by default', () => {
+test('desktop opens Hunt and Ready to Post side by side', () => {
   const layout = defaultDesktopLayout(1200, 700);
+  assert.deepEqual(Object.keys(layout).sort(), ['finder', 'scanner', 'settings']);
   assert.equal(layout.finder.minimized, false);
   assert.equal(layout.scanner.minimized, false);
-  assert.equal(layout.inventory.minimized, true);
+  assert.equal(layout.settings.minimized, true);
   assert.ok(layout.finder.left + layout.finder.width <= layout.scanner.left);
 });
 
 test('stored desktop layout is sanitized after a viewport change', () => {
   const layout = sanitizeDesktopLayout({
     finder: { left: 9999, top: -100, width: 3000, height: 3000, minimized: false },
-    scanner: { minimized: true }
+    scanner: { minimized: true },
+    inventory: { minimized: false }
   }, 1000, 600);
   assert.equal(layout.finder.left, 0);
   assert.equal(layout.finder.top, 0);
   assert.equal(layout.finder.width, 1000);
   assert.equal(layout.finder.height, 600);
   assert.equal(layout.scanner.minimized, true);
+  assert.equal('inventory' in layout, false);
 });
