@@ -1,25 +1,16 @@
 import { $, $$, copyText } from './js/util.js';
-import { state, subscribe, api, loadItems, loadSettings } from './js/data.js';
+import { state, subscribe, api, loadSettings } from './js/data.js';
 import { toast } from './js/ui.js';
-import { renderDashboard } from './js/views/dashboard.js';
 import { initScanner, renderScanEcon, applyScannerDefaults } from './js/views/scanner.js';
-import { initInventory, renderInventory, focusInventorySearch } from './js/views/inventory.js';
-import { initDrawer, openDrawer, requestClose, isDrawerOpen, syncDrawer } from './js/views/drawer.js';
-import { initSources, loadSources } from './js/views/sources.js';
 import { initSettings, fillAiForm, fillSettingsForm, renderAiStatus, syncThemeChoice } from './js/views/settings.js';
-import { initFinder, renderFinder, loadSavedSearches, isReportOpen, closeReport } from './js/views/finder.js';
 import { initHunt } from './js/views/hunt.js';
 import { initDesktop, openDesktopWindow, isDesktopMode } from './js/desktop.js';
 
-const VIEWS = ['dashboard', 'finder', 'scanner', 'inventory', 'sources', 'settings'];
-const RENDERERS = { dashboard: renderDashboard, finder: renderFinder, inventory: renderInventory, scanner: renderScanEcon };
+const VIEWS = ['finder', 'scanner', 'settings'];
 const THEME_KEY = 'fliplab-theme';
-
-let current = null;
+let current = 'finder';
 let ready = false;
-const stale = new Set(VIEWS);
 
-/* ---------- Theme ---------- */
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
 function themePref() {
@@ -31,21 +22,16 @@ function applyTheme(pref) {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   $('meta[name="theme-color"]').content = dark ? '#0a0c0b' : '#f4f5f1';
   const toggle = $('#themeToggle');
-  toggle.innerHTML = `<svg class="i"><use href="#i-${dark ? 'sun' : 'moon'}"/></svg>`;
-  toggle.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  if (toggle) {
+    toggle.innerHTML = `<svg class="i"><use href="#i-${dark ? 'sun' : 'moon'}"/></svg>`;
+    toggle.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  }
 }
 
 function setTheme(pref) {
   try { localStorage.setItem(THEME_KEY, pref); } catch {}
   applyTheme(pref);
   syncThemeChoice(pref);
-}
-
-/* ---------- Rendering & routing ---------- */
-function render(view) {
-  if (!ready && view !== 'scanner') return;
-  RENDERERS[view]?.();
-  stale.delete(view);
 }
 
 function activateView(view) {
@@ -61,75 +47,42 @@ function activateView(view) {
   $('#pageTitle').textContent = section.dataset.title;
   $('#pageEyebrow').textContent = section.dataset.eyebrow;
   document.title = `${section.dataset.title} · FlipLab`;
-  if (stale.has(view)) render(view);
+  if (view === 'scanner' && ready) renderScanEcon();
 }
 
 function show(view) {
+  const safe = VIEWS.includes(view) ? view : 'finder';
   if (isDesktopMode()) {
-    openDesktopWindow(view);
+    openDesktopWindow(safe);
+    activateView(safe);
     return;
   }
-  const changed = view !== current;
-  const section = $(`#view-${view}`);
+  const section = $(`#view-${safe}`);
   $$('.view').forEach((el) => el.classList.toggle('active', el === section));
-  activateView(view);
-  if (changed) window.scrollTo(0, 0);
+  activateView(safe);
 }
 
 function parseHash() {
-  const match = location.hash.match(/^#\/([a-z]+)(?:\/([\w-]+))?/i) || [];
-  const fallback = isDesktopMode() ? 'finder' : 'dashboard';
-  return { view: VIEWS.includes(match[1]) ? match[1] : fallback, id: match[2] };
+  const match = location.hash.match(/^#\/([a-z]+)/i);
+  return VIEWS.includes(match?.[1]) ? match[1] : 'finder';
 }
 
-async function route() {
-  const { view, id } = parseHash();
-  if (view === 'inventory' && id) {
-    show('inventory');
-    if (ready) openDrawer(id, { onClose: () => history.replaceState(null, '', `#/${current || 'inventory'}`) });
-    return;
-  }
-  if (isDrawerOpen() && !(await requestClose())) return;
-  closeReport();
-  show(view);
+function route() {
+  show(parseHash());
 }
 
 function onStateChange() {
-  VIEWS.forEach((view) => stale.add(view));
-  if (current) render(current);
-  const active = state.items.filter((item) => ['watching', 'bought', 'listed'].includes(item.status)).length;
-  $('#navCount').textContent = active;
-  $('#navCount').hidden = !ready || active === 0;
   renderAiStatus();
-  syncDrawer();
-}
-
-/* ---------- Global interactions ---------- */
-function hashView(hash) {
-  const match = String(hash || '').match(/^#\/([a-z]+)/i);
-  return VIEWS.includes(match?.[1]) ? match[1] : null;
-}
-
-function goThen(hash, fn) {
-  if (isDesktopMode()) {
-    const view = hashView(hash);
-    if (view) {
-      history.replaceState(null, '', hash);
-      show(view);
-      requestAnimationFrame(fn);
-    }
-    return;
-  }
-  if (location.hash === hash) {
-    fn();
-    return;
-  }
-  window.addEventListener('hashchange', () => requestAnimationFrame(fn), { once: true });
-  location.hash = hash;
+  if (ready && current === 'scanner') renderScanEcon();
 }
 
 function isTyping(target) {
   return target.closest('input, textarea, select, [contenteditable="true"]');
+}
+
+function openView(view) {
+  history.replaceState(null, '', `#/${view}`);
+  show(view);
 }
 
 function bindGlobal() {
@@ -140,48 +93,19 @@ function bindGlobal() {
   $$('.nav-item[data-view]').forEach((link) => link.addEventListener('click', (event) => {
     if (!isDesktopMode()) return;
     event.preventDefault();
-    const view = link.dataset.view;
-    history.replaceState(null, '', `#/${view}`);
-    show(view);
+    openView(link.dataset.view);
   }));
+
   $('.brand').addEventListener('click', (event) => {
     if (!isDesktopMode()) return;
     event.preventDefault();
-    history.replaceState(null, '', '#/dashboard');
-    show('dashboard');
+    openView('finder');
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !$('#confirmModal').open && (isDrawerOpen() || isReportOpen())) {
-      event.preventDefault();
-      if (isDrawerOpen()) requestClose();
-      else closeReport();
-      return;
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target) || isDrawerOpen() || isReportOpen()) return;
-    if (event.key === '/') {
-      event.preventDefault();
-      goThen('#/inventory', focusInventorySearch);
-    } else if (event.key.toLowerCase() === 'n') {
-      goThen('#/scanner', () => $('#scanForm [name="title"]').focus());
-    }
-  });
-
-  $('#topSearchBtn').addEventListener('click', (event) => {
-    event.preventDefault();
-    goThen('#/inventory', focusInventorySearch);
-  });
-
-  document.addEventListener('click', (event) => {
-    const row = event.target.closest('[data-open]');
-    if (!row) return;
-    if (isDesktopMode()) {
-      history.replaceState(null, '', `#/inventory/${row.dataset.open}`);
-      show('inventory');
-      if (ready) openDrawer(row.dataset.open, { onClose: () => history.replaceState(null, '', '#/inventory') });
-    } else {
-      location.hash = `#/inventory/${row.dataset.open}`;
-    }
+    if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+    if (event.key.toLowerCase() === 'h') openView('finder');
+    if (event.key.toLowerCase() === 'n') openView('scanner');
   });
 
   document.addEventListener('click', async (event) => {
@@ -199,52 +123,36 @@ function bindGlobal() {
       if (label) label.textContent = button.dataset.label;
     }, 1400);
   });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ready) loadItems().catch(() => {});
-  });
-}
-
-function showSkeletons() {
-  $('#kpis').innerHTML = Array.from({ length: 4 }, () => '<div class="kpi"><div class="skel" style="height:12px;width:50%"></div><div class="skel" style="height:28px;width:60%;margin:12px 0 8px"></div><div class="skel" style="height:10px;width:70%"></div></div>').join('');
-  $('#inventoryList').innerHTML = `<div style="padding:16px 20px;display:grid;gap:10px">${'<div class="skel" style="height:52px"></div>'.repeat(4)}</div>`;
 }
 
 async function init() {
   applyTheme(themePref());
   bindGlobal();
   initScanner();
-  initInventory(() => render('inventory'));
-  initDrawer();
-  initSources();
-  initFinder();
   initHunt();
   initSettings({ onThemeChange: setTheme, currentTheme: themePref() });
   subscribe(onStateChange);
-  showSkeletons();
 
   await initDesktop({ onFocus: activateView });
-  await route();
+  route();
 
   try {
     const health = await api('/api/health');
     state.ai = health.ai;
     state.version = health.version;
-    fillAiForm();
-    await Promise.all([loadSettings(), loadItems()]);
+    await loadSettings();
     ready = true;
+    fillAiForm();
     fillSettingsForm();
     applyScannerDefaults();
     onStateChange();
-    await route();
+    route();
   } catch (error) {
     $('#aiName').textContent = 'Server offline';
-    $('#aiModel').textContent = 'retry by refreshing';
+    $('#aiModel').textContent = 'refresh to retry';
     $('#aiDot').className = 'ai-dot bad';
-    toast(`Could not reach the FlipLab server: ${error.message}`, { type: 'error' });
+    toast(`Could not reach FlipLab: ${error.message}`, { type: 'error' });
   }
-  loadSources();
-  loadSavedSearches();
 }
 
 init();
