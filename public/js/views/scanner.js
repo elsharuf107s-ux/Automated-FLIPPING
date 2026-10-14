@@ -270,7 +270,7 @@ export function initScanner() {
   ['dragleave', 'drop'].forEach((type) => drop.addEventListener(type, () => drop.classList.remove('drag')));
   drop.addEventListener('drop', (event) => {
     event.preventDefault();
-    takeFile([...event.dataTransfer.files].find((file) => file.type.startsWith('image/'));
+    takeFile([...event.dataTransfer.files].find((file) => file.type.startsWith('image/')));
   });
   document.addEventListener('paste', (event) => {
     if (!$('#view-scanner').classList.contains('active')) return;
