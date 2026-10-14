@@ -1,11 +1,15 @@
 import { $, esc, money } from '../util.js';
 import { api } from '../data.js';
 import { icon, toast } from '../ui.js';
+import { hasEligibleVerificationSupplier, selectVerificationCandidates } from '../agent-queue.js';
 
 const AUTO_KEY = 'fliplab-agent-auto-verify';
 const verified = new Map();
 const queuedByUrl = new Map();
 let latestStatus = { bridge: null, counts: {}, tasks: [] };
+let pendingAutoItems = [];
+let autoQueueNote = '';
+let autoQueueRunning = false;
 let pollTimer = null;
 let started = false;
 
@@ -80,32 +84,81 @@ function renderAgent() {
   const recent = latestStatus.tasks || [];
   tasks.innerHTML = recent.length
     ? recent.map(taskHtml).join('')
-    : `<div class="empty">${icon('plug')}<strong>No browser tasks yet</strong>Run a Hunt and FlipLab can verify the best supplier matches automatically.</div>`;
+    : `<div class="empty">${icon('plug')}<strong>No browser tasks yet</strong>Run a Hunt and FlipLab can verify eligible AliExpress/DHgate matches automatically.</div>`;
   const auto = $('#agentAutoVerify');
   if (auto) auto.checked = autoPref();
+  const autoStatus = $('#agentAutoStatus');
+  if (autoStatus) autoStatus.textContent = autoQueueNote;
 }
 
-async function refreshStatus() {
+function doneUrl(url) {
+  return Boolean(getSupplierVerification(url) || queuedByUrl.has(url));
+}
+
+async function queuePendingAuto() {
+  if (autoQueueRunning || !agentAutoVerifyEnabled() || !isBrowserAgentConnected() || !pendingAutoItems.length) return { queued: 0 };
+  autoQueueRunning = true;
+  try {
+    const candidates = selectVerificationCandidates(pendingAutoItems, { limit: 3, isDone: doneUrl });
+    if (!candidates.length) {
+      if (!hasEligibleVerificationSupplier(pendingAutoItems)) {
+        autoQueueNote = 'Latest Hunt has no browser-verifiable AliExpress/DHgate match. Temu results stay search-only.';
+      } else {
+        autoQueueNote = 'Eligible supplier matches from the latest Hunt are already queued or verified.';
+      }
+      pendingAutoItems = [];
+      renderAgent();
+      return { queued: 0 };
+    }
+
+    let queued = 0;
+    for (const candidate of candidates) {
+      try {
+        const task = await queueSupplierVerification(candidate.supplier, candidate.reference, { silent: true });
+        if (task?.id) candidate.supplier.browserTaskId = task.id;
+        queued += 1;
+      } catch {}
+    }
+
+    autoQueueNote = queued
+      ? `Queued ${queued} strongest browser-verifiable supplier match${queued === 1 ? '' : 'es'} from the latest Hunt.`
+      : 'No supplier verification could be queued from the latest Hunt.';
+    renderAgent();
+    if (queued) toast(`Browser Agent queued ${queued} supplier verification${queued === 1 ? '' : 's'}`, { type: 'info', duration: 1800 });
+    return { queued };
+  } finally {
+    autoQueueRunning = false;
+  }
+}
+
+async function refreshStatus({ triggerAuto = true } = {}) {
   try {
     latestStatus = await api('/api/agent/status');
     for (const task of latestStatus.tasks || []) {
       if (task.status === 'completed') saveVerification(task);
       if (task.status === 'failed' && task.url) queuedByUrl.delete(task.url);
+      if (task.url && ['queued', 'running', 'processing'].includes(task.status)) queuedByUrl.set(task.url, task);
     }
     renderAgent();
-  } catch {}
+    if (triggerAuto && isBrowserAgentConnected() && pendingAutoItems.length) await queuePendingAuto();
+    return latestStatus;
+  } catch {
+    return latestStatus;
+  }
 }
 
 function startPolling() {
   clearInterval(pollTimer);
   refreshStatus();
-  pollTimer = setInterval(refreshStatus, 2000);
+  pollTimer = setInterval(() => refreshStatus(), 2000);
 }
 
 export async function queueSupplierVerification(supplier, reference = {}, { silent = false } = {}) {
   const url = String(supplier?.url || '');
   if (!url) throw new Error('Supplier URL is missing.');
-  if (supplier.searchOnly || /(^|\.)temu\.com$/i.test(new URL(url).hostname)) {
+  let host = '';
+  try { host = new URL(url).hostname; } catch { throw new Error('Supplier URL is invalid.'); }
+  if (supplier.searchOnly || /(^|\.)temu\.com$/i.test(host)) {
     throw new Error('Temu stays search-only and is not opened by the local browser agent.');
   }
   const cached = getSupplierVerification(url);
@@ -123,18 +176,22 @@ export async function queueSupplierVerification(supplier, reference = {}, { sile
 }
 
 export async function autoVerifySuppliers(items = []) {
-  if (!agentAutoVerifyEnabled() || !isBrowserAgentConnected()) return;
-  const candidates = [];
-  for (const item of items) {
-    const supplier = item?.bestSupplier;
-    if (!supplier || supplier.searchOnly || getSupplierVerification(supplier.url) || queuedByUrl.has(supplier.url)) continue;
-    candidates.push({ supplier, reference: item });
-    if (candidates.length >= 3) break;
+  pendingAutoItems = Array.isArray(items) ? items : [];
+  if (!agentAutoVerifyEnabled()) {
+    autoQueueNote = 'Automatic supplier verification is turned off.';
+    renderAgent();
+    return { queued: 0, reason: 'disabled' };
   }
-  for (const candidate of candidates) {
-    try { await queueSupplierVerification(candidate.supplier, candidate.reference, { silent: true }); } catch {}
+
+  // Refresh once here instead of trusting the last 2-second poll. This removes the
+  // race where a Hunt finishes just after the local bridge connects.
+  await refreshStatus({ triggerAuto: false });
+  if (!isBrowserAgentConnected()) {
+    autoQueueNote = 'Latest Hunt is waiting for the local Browser Agent to connect; it will queue automatically when the bridge appears.';
+    renderAgent();
+    return { queued: 0, reason: 'waiting-for-bridge' };
   }
-  if (candidates.length) toast(`Browser Agent queued ${candidates.length} supplier verification${candidates.length === 1 ? '' : 's'}`, { type: 'info', duration: 1800 });
+  return queuePendingAuto();
 }
 
 function injectAgentShell() {
@@ -164,22 +221,23 @@ function injectAgentShell() {
         <p class="field-note">The bridge opens supplier pages in a local Playwright browser and sends visible product facts back to FlipLab. It does not control Depop, buy products, send messages, publish listings, or bypass CAPTCHAs.</p>
         <label style="display:flex;align-items:center;gap:10px;margin-top:14px">
           <input id="agentAutoVerify" type="checkbox" ${autoPref() ? 'checked' : ''}>
-          <span><strong>Auto-verify the top 3 supplier matches after each Hunt</strong><br><small class="field-note">Only runs while the local bridge is connected.</small></span>
+          <span><strong>Auto-verify the top 3 supplier matches after each Hunt</strong><br><small class="field-note">FlipLab checks all Hunt supplier matches and chooses the strongest eligible AliExpress/DHgate pages.</small></span>
         </label>
+        <p class="field-note" id="agentAutoStatus" style="margin-top:10px"></p>
       </article>
 
       <article class="panel">
-        <div class="panel-head"><div><p class="eyebrow">One-time local setup</p><h3>Private Codespaces tunnel</h3></div></div>
-        <p class="field-note">Run these from the Chromebook Linux terminal. The GitHub CLI tunnel keeps port 3000 private; do not make the Codespaces port public.</p>
+        <div class="panel-head"><div><p class="eyebrow">Local setup</p><h3>Run beside FlipLab</h3></div></div>
+        <p class="field-note">If FlipLab itself is running locally on this Chromebook, just run the local agent command below in a second terminal. If FlipLab is running in Codespaces, use the private GitHub CLI port-forward first.</p>
         <div class="copy-box" style="margin-top:12px">
-          <h4>1 · Forward the private Codespace port</h4>
-          <pre id="agentForwardCommand" style="white-space:pre-wrap">gh codespace ports forward 3000:3000 -R elsharuf107s-ux/Automated-FLIPPING</pre>
-          <button class="btn btn-ghost btn-sm" type="button" data-copy="agentForwardCommand">${icon('copy')}<span>Copy</span></button>
-        </div>
-        <div class="copy-box" style="margin-top:10px">
-          <h4>2 · In a local clone of FlipLab</h4>
+          <h4>Local FlipLab</h4>
           <pre id="agentRunCommand" style="white-space:pre-wrap">npm install\nnpx playwright install chromium\nnpm run agent:local</pre>
           <button class="btn btn-ghost btn-sm" type="button" data-copy="agentRunCommand">${icon('copy')}<span>Copy</span></button>
+        </div>
+        <div class="copy-box" style="margin-top:10px">
+          <h4>Codespaces only · private tunnel</h4>
+          <pre id="agentForwardCommand" style="white-space:pre-wrap">gh codespace ports forward 3000:3000 -R elsharuf107s-ux/Automated-FLIPPING</pre>
+          <button class="btn btn-ghost btn-sm" type="button" data-copy="agentForwardCommand">${icon('copy')}<span>Copy</span></button>
         </div>
         <p class="field-note" style="margin-top:10px">Optional existing-Chrome mode: <code>npm run agent:local -- --cdp http://127.0.0.1:9222</code> after starting a Chromium-based browser with remote debugging enabled.</p>
       </article>
@@ -198,6 +256,13 @@ export function initAgent() {
   injectAgentShell();
   $('#agentAutoVerify')?.addEventListener('change', (event) => {
     try { localStorage.setItem(AUTO_KEY, event.target.checked ? 'on' : 'off'); } catch {}
+    if (event.target.checked) {
+      autoQueueNote = pendingAutoItems.length ? 'Automatic verification enabled; checking the latest Hunt…' : 'Automatic verification enabled.';
+      refreshStatus().catch(() => {});
+    } else {
+      autoQueueNote = 'Automatic supplier verification is turned off.';
+    }
+    renderAgent();
     toast(event.target.checked ? 'Automatic supplier verification enabled' : 'Automatic supplier verification disabled', { type: 'info', duration: 1500 });
   });
   startPolling();
