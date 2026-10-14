@@ -16,6 +16,13 @@ import {
   completeBrowserAgentTask,
   failBrowserAgentTask
 } from './lib/browser-agent.js';
+import {
+  createBrowserScoutTask,
+  browserScoutStatus,
+  claimBrowserScoutTask,
+  completeBrowserScoutTask,
+  failBrowserScoutTask
+} from './lib/browser-scout.js';
 import { httpError } from './lib/errors.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,8 +53,6 @@ app.get('/api/health', async (_req, res) => {
   });
 });
 
-// AI Hunt runs as a short-lived server job so Codespaces/reverse proxies never
-// have to keep one HTTP request open during web search + supplier matching.
 app.post('/api/hunt', async (req, res) => {
   res.status(202).json(await startHuntJob(req.body?.prompt));
 });
@@ -93,12 +98,35 @@ app.post('/api/analyze', async (req, res) => {
   res.json(analysis);
 });
 
-// Browser Agent v1 is deliberately narrow: a local Playwright process may only
-// verify supplier pages. It cannot buy, message, publish, control Depop, or bypass
-// access controls. The bridge normally reaches this API through a private
-// `gh codespace ports forward` tunnel rather than a public Codespaces port.
 app.get('/api/agent/status', (_req, res) => {
-  res.json(browserAgentStatus());
+  const verification = browserAgentStatus();
+  const scouts = browserScoutStatus();
+  const tasks = [...scouts, ...verification.tasks]
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 30);
+  const counts = tasks.reduce((acc, task) => {
+    acc[task.status] = (acc[task.status] || 0) + 1;
+    return acc;
+  }, {});
+  res.json({ bridge: verification.bridge, counts, tasks });
+});
+
+app.post('/api/agent/scout', async (req, res) => {
+  res.status(202).json(await createBrowserScoutTask(req.body || {}));
+});
+
+app.post('/api/agent/scout/claim', (req, res) => {
+  const task = claimBrowserScoutTask(req.body || {});
+  if (!task) return res.status(204).end();
+  res.json(task);
+});
+
+app.post('/api/agent/scout/:id/complete', (req, res) => {
+  res.status(202).json(completeBrowserScoutTask(req.params.id, req.body || {}));
+});
+
+app.post('/api/agent/scout/:id/fail', (req, res) => {
+  res.json(failBrowserScoutTask(req.params.id, req.body || {}));
 });
 
 app.post('/api/agent/verify', (req, res) => {

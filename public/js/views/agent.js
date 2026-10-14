@@ -1,15 +1,13 @@
 import { $, esc, money } from '../util.js';
 import { api } from '../data.js';
 import { icon, toast } from '../ui.js';
-import { hasEligibleVerificationSupplier, selectVerificationCandidates } from '../agent-queue.js';
 
 const AUTO_KEY = 'fliplab-agent-auto-verify';
 const verified = new Map();
 const queuedByUrl = new Map();
 let latestStatus = { bridge: null, counts: {}, tasks: [] };
-let pendingAutoItems = [];
+let pendingScoutGoal = '';
 let autoQueueNote = '';
-let autoQueueRunning = false;
 let pollTimer = null;
 let started = false;
 
@@ -48,10 +46,37 @@ function bridgeStatusHtml() {
       <span class="field-note">${esc(bridge.mode || 'Playwright')} · last seen ${esc(new Date(bridge.lastSeen).toLocaleTimeString())}</span>`;
   }
   return `<span class="status-chip warn">${icon('alert')}Local browser offline</span>
-    <span class="field-note">Start the Chromebook bridge to let FlipLab verify supplier pages.</span>`;
+    <span class="field-note">Start <code>npm run agent:local</code> to let FlipLab surf supplier sites on this Chromebook.</span>`;
+}
+
+function scoutResultHtml(result) {
+  if (!result) return '';
+  const matches = (result.bestMatches || []).slice(0, 3);
+  return `<div style="display:grid;gap:7px;margin-top:8px">
+    ${result.summary ? `<p class="field-note">${esc(result.summary)}</p>` : ''}
+    ${matches.map((match) => `<div class="copy-box" style="padding:9px">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <strong>${esc(match.source || 'Supplier')} · ${esc(match.title || 'Product')}</strong>
+        <span class="badge buy">${Math.round(Number(match.matchScore) || 0)}% match</span>
+      </div>
+      <p class="field-note" style="margin-top:5px">${esc([
+        match.price != null ? `Price ${money(match.price)}` : '',
+        match.shipping != null ? `Ship ${money(match.shipping)}` : '',
+        match.landedCost != null ? `Landed ${money(match.landedCost)}` : '',
+        match.why || ''
+      ].filter(Boolean).join(' · '))}</p>
+      ${match.url ? `<a class="btn btn-ghost btn-sm" style="margin-top:7px" href="${esc(match.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open product</span></a>` : ''}
+    </div>`).join('')}
+  </div>`;
 }
 
 function taskSummary(task) {
+  if (task.type === 'scout_suppliers') {
+    if (task.status === 'queued') return `Waiting to surf: ${task.goal || ''}`;
+    if (task.status === 'running') return `Browser is surfing AliExpress / DHgate for: ${task.goal || ''}`;
+    if (task.status === 'processing') return 'Browser finished surfing; AI is ranking what it found.';
+    return task.result?.summary || '';
+  }
   const result = task.result;
   if (!result) return '';
   const facts = [
@@ -65,14 +90,18 @@ function taskSummary(task) {
 
 function taskHtml(task) {
   const cls = task.status === 'completed' ? 'buy' : task.status === 'failed' ? 'over' : task.status === 'running' || task.status === 'processing' ? 'watch' : '';
-  const status = task.status === 'processing' ? 'AI structuring' : task.status;
-  const detail = task.error?.message || taskSummary(task) || (task.status === 'queued' ? 'Waiting for the local bridge' : '');
+  const status = task.status === 'processing' ? 'AI ranking' : task.status;
+  const scout = task.type === 'scout_suppliers';
+  const title = scout ? 'Browser Scout' : task.source || 'Supplier verification';
+  const sub = scout ? task.goal : task.supplier?.title || task.url || '';
+  const detail = task.error?.message || taskSummary(task) || (task.status === 'queued' ? 'Waiting for the local browser' : '');
   return `<div class="panel" style="padding:12px;margin:0">
     <div class="panel-head" style="margin-bottom:6px">
-      <div><strong>${esc(task.source || 'Supplier')}</strong><p class="field-note">${esc(task.supplier?.title || task.url || '')}</p></div>
+      <div><strong>${esc(title)}</strong><p class="field-note">${esc(sub || '')}</p></div>
       <span class="badge ${cls}">${esc(status)}</span>
     </div>
     ${detail ? `<p class="field-note">${esc(detail)}</p>` : ''}
+    ${scout && task.status === 'completed' ? scoutResultHtml(task.result) : ''}
   </div>`;
 }
 
@@ -84,50 +113,44 @@ function renderAgent() {
   const recent = latestStatus.tasks || [];
   tasks.innerHTML = recent.length
     ? recent.map(taskHtml).join('')
-    : `<div class="empty">${icon('plug')}<strong>No browser tasks yet</strong>Run a Hunt and FlipLab can verify eligible AliExpress/DHgate matches automatically.</div>`;
+    : `<div class="empty">${icon('plug')}<strong>No browser missions yet</strong>Give Browser Scout a goal or run a Hunt with auto-surf enabled.</div>`;
   const auto = $('#agentAutoVerify');
   if (auto) auto.checked = autoPref();
   const autoStatus = $('#agentAutoStatus');
   if (autoStatus) autoStatus.textContent = autoQueueNote;
 }
 
-function doneUrl(url) {
-  return Boolean(getSupplierVerification(url) || queuedByUrl.has(url));
+export async function queueBrowserScout(goal, { silent = false } = {}) {
+  const cleanGoal = String(goal || '').trim();
+  if (cleanGoal.length < 3) throw new Error('Tell Browser Scout what you want it to find.');
+  const task = await api('/api/agent/scout', { body: { goal: cleanGoal } });
+  latestStatus.tasks = [task, ...(latestStatus.tasks || []).filter((entry) => entry.id !== task.id)].slice(0, 30);
+  renderAgent();
+  if (!silent) toast(isBrowserAgentConnected() ? 'Browser Scout mission queued' : 'Mission queued — start the local Browser Agent', { type: 'info' });
+  return task;
 }
 
-async function queuePendingAuto() {
-  if (autoQueueRunning || !agentAutoVerifyEnabled() || !isBrowserAgentConnected() || !pendingAutoItems.length) return { queued: 0 };
-  autoQueueRunning = true;
+function huntScoutGoal(items = []) {
+  const candidates = (Array.isArray(items) ? items : []).filter((item) => item?.title).slice(0, 4);
+  if (!candidates.length) return '';
+  const lines = candidates.map((item, index) => `${index + 1}. ${item.title}${item.price != null ? ` — reference ask ${money(item.price)}` : ''}`);
+  return `Surf AliExpress and DHgate and find cheaper lawful clothing supplier options for these Hunt opportunities. Match the garment/style attributes, not counterfeit branding. Prefer strong visual/style matches, low landed cost, useful size/color availability, and products that appear in stock.\n${lines.join('\n')}`;
+}
+
+async function queuePendingScout() {
+  if (!pendingScoutGoal || !agentAutoVerifyEnabled() || !isBrowserAgentConnected()) return { queued: 0 };
+  const goal = pendingScoutGoal;
+  pendingScoutGoal = '';
   try {
-    const candidates = selectVerificationCandidates(pendingAutoItems, { limit: 3, isDone: doneUrl });
-    if (!candidates.length) {
-      if (!hasEligibleVerificationSupplier(pendingAutoItems)) {
-        autoQueueNote = 'Latest Hunt has no browser-verifiable AliExpress/DHgate match. Temu results stay search-only.';
-      } else {
-        autoQueueNote = 'Eligible supplier matches from the latest Hunt are already queued or verified.';
-      }
-      pendingAutoItems = [];
-      renderAgent();
-      return { queued: 0 };
-    }
-
-    let queued = 0;
-    for (const candidate of candidates) {
-      try {
-        const task = await queueSupplierVerification(candidate.supplier, candidate.reference, { silent: true });
-        if (task?.id) candidate.supplier.browserTaskId = task.id;
-        queued += 1;
-      } catch {}
-    }
-
-    autoQueueNote = queued
-      ? `Queued ${queued} strongest browser-verifiable supplier match${queued === 1 ? '' : 'es'} from the latest Hunt.`
-      : 'No supplier verification could be queued from the latest Hunt.';
+    await queueBrowserScout(goal, { silent: true });
+    autoQueueNote = 'Browser Scout is now surfing AliExpress and DHgate for the latest Hunt.';
+    toast('Browser Scout started surfing supplier sites', { type: 'info', duration: 1800 });
     renderAgent();
-    if (queued) toast(`Browser Agent queued ${queued} supplier verification${queued === 1 ? '' : 's'}`, { type: 'info', duration: 1800 });
-    return { queued };
-  } finally {
-    autoQueueRunning = false;
+    return { queued: 1 };
+  } catch (error) {
+    autoQueueNote = `Could not queue Browser Scout: ${error.message}`;
+    renderAgent();
+    return { queued: 0 };
   }
 }
 
@@ -140,7 +163,7 @@ async function refreshStatus({ triggerAuto = true } = {}) {
       if (task.url && ['queued', 'running', 'processing'].includes(task.status)) queuedByUrl.set(task.url, task);
     }
     renderAgent();
-    if (triggerAuto && isBrowserAgentConnected() && pendingAutoItems.length) await queuePendingAuto();
+    if (triggerAuto && isBrowserAgentConnected() && pendingScoutGoal) await queuePendingScout();
     return latestStatus;
   } catch {
     return latestStatus;
@@ -167,31 +190,34 @@ export async function queueSupplierVerification(supplier, reference = {}, { sile
 
   const task = await api('/api/agent/verify', { body: { supplier, reference } });
   queuedByUrl.set(url, task);
-  latestStatus.tasks = [task, ...(latestStatus.tasks || []).filter((entry) => entry.id !== task.id)].slice(0, 20);
+  latestStatus.tasks = [task, ...(latestStatus.tasks || []).filter((entry) => entry.id !== task.id)].slice(0, 30);
   renderAgent();
-  if (!silent) {
-    toast(isBrowserAgentConnected() ? 'Supplier verification queued in your local browser' : 'Queued — start the Browser Agent bridge', { type: 'info' });
-  }
+  if (!silent) toast(isBrowserAgentConnected() ? 'Supplier verification queued in your local browser' : 'Queued — start the Browser Agent bridge', { type: 'info' });
   return task;
 }
 
+// Kept under the original exported name so Hunt does not need another integration layer.
+// v2 changes the behavior from "verify URLs search already found" to "make the local
+// browser actively surf supplier sites and find products itself."
 export async function autoVerifySuppliers(items = []) {
-  pendingAutoItems = Array.isArray(items) ? items : [];
+  pendingScoutGoal = huntScoutGoal(items);
+  if (!pendingScoutGoal) {
+    autoQueueNote = 'Latest Hunt did not produce enough product information for a supplier mission.';
+    renderAgent();
+    return { queued: 0, reason: 'no-goal' };
+  }
   if (!agentAutoVerifyEnabled()) {
-    autoQueueNote = 'Automatic supplier verification is turned off.';
+    autoQueueNote = 'Automatic Browser Scout after Hunt is turned off.';
     renderAgent();
     return { queued: 0, reason: 'disabled' };
   }
-
-  // Refresh once here instead of trusting the last 2-second poll. This removes the
-  // race where a Hunt finishes just after the local bridge connects.
   await refreshStatus({ triggerAuto: false });
   if (!isBrowserAgentConnected()) {
-    autoQueueNote = 'Latest Hunt is waiting for the local Browser Agent to connect; it will queue automatically when the bridge appears.';
+    autoQueueNote = 'Latest Hunt is waiting for your local Browser Agent. It will start surfing when the bridge connects.';
     renderAgent();
     return { queued: 0, reason: 'waiting-for-bridge' };
   }
-  return queuePendingAuto();
+  return queuePendingScout();
 }
 
 function injectAgentShell() {
@@ -210,40 +236,43 @@ function injectAgentShell() {
   section.className = 'view';
   section.id = 'view-agent';
   section.dataset.title = 'Browser Agent';
-  section.dataset.eyebrow = 'Local Playwright verification';
+  section.dataset.eyebrow = 'Local Playwright web worker';
   section.innerHTML = `
     <div style="display:grid;gap:14px;padding-bottom:10px">
       <article class="panel">
         <div class="panel-head">
-          <div><p class="eyebrow">Chromebook bridge</p><h3>Give FlipLab local browser hands</h3></div>
+          <div><p class="eyebrow">Browser Scout</p><h3>Tell the browser what to go find</h3></div>
           <div id="agentConnection" style="display:grid;justify-items:end;gap:5px"></div>
         </div>
-        <p class="field-note">The bridge opens supplier pages in a local Playwright browser and sends visible product facts back to FlipLab. It does not control Depop, buy products, send messages, publish listings, or bypass CAPTCHAs.</p>
-        <label style="display:flex;align-items:center;gap:10px;margin-top:14px">
+        <p class="field-note">This is active browser research: Playwright opens supplier sites on your Chromebook, types searches, scrolls results, opens promising product pages, collects what it sees, then FlipLab AI ranks the products. It stays read-only: no buying, messaging, Depop control, or CAPTCHA bypass.</p>
+        <form id="agentMissionForm" style="display:grid;gap:10px;margin-top:14px">
+          <textarea id="agentMission" rows="3" maxlength="900" required minlength="3" placeholder="Find oversized washed black hoodies under $15 landed, sizes M-XXL, preferably cotton blend"></textarea>
+          <div class="form-actions split">
+            <span class="field-note small">Currently surfs AliExpress + DHgate. More research sites can be added after this loop is reliable.</span>
+            <button class="btn btn-primary" id="agentMissionGo" type="submit">${icon('search')}<span>Send browser surfing</span></button>
+          </div>
+        </form>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head"><div><p class="eyebrow">Hunt integration</p><h3>Automatic supplier surfing</h3></div></div>
+        <label style="display:flex;align-items:center;gap:10px">
           <input id="agentAutoVerify" type="checkbox" ${autoPref() ? 'checked' : ''}>
-          <span><strong>Auto-verify the top 3 supplier matches after each Hunt</strong><br><small class="field-note">FlipLab checks all Hunt supplier matches and chooses the strongest eligible AliExpress/DHgate pages.</small></span>
+          <span><strong>After each Hunt, make the local browser search suppliers itself</strong><br><small class="field-note">Hunt chooses opportunities; Browser Scout performs the supplier-site research.</small></span>
         </label>
         <p class="field-note" id="agentAutoStatus" style="margin-top:10px"></p>
       </article>
 
       <article class="panel">
         <div class="panel-head"><div><p class="eyebrow">Local setup</p><h3>Run beside FlipLab</h3></div></div>
-        <p class="field-note">If FlipLab itself is running locally on this Chromebook, just run the local agent command below in a second terminal. If FlipLab is running in Codespaces, use the private GitHub CLI port-forward first.</p>
-        <div class="copy-box" style="margin-top:12px">
-          <h4>Local FlipLab</h4>
+        <div class="copy-box" style="margin-top:10px">
           <pre id="agentRunCommand" style="white-space:pre-wrap">npm install\nnpx playwright install chromium\nnpm run agent:local</pre>
           <button class="btn btn-ghost btn-sm" type="button" data-copy="agentRunCommand">${icon('copy')}<span>Copy</span></button>
         </div>
-        <div class="copy-box" style="margin-top:10px">
-          <h4>Codespaces only · private tunnel</h4>
-          <pre id="agentForwardCommand" style="white-space:pre-wrap">gh codespace ports forward 3000:3000 -R elsharuf107s-ux/Automated-FLIPPING</pre>
-          <button class="btn btn-ghost btn-sm" type="button" data-copy="agentForwardCommand">${icon('copy')}<span>Copy</span></button>
-        </div>
-        <p class="field-note" style="margin-top:10px">Optional existing-Chrome mode: <code>npm run agent:local -- --cdp http://127.0.0.1:9222</code> after starting a Chromium-based browser with remote debugging enabled.</p>
       </article>
 
       <div>
-        <div class="panel-head"><div><p class="eyebrow">Activity</p><h3>Agent tasks</h3></div></div>
+        <div class="panel-head"><div><p class="eyebrow">Activity</p><h3>Browser missions</h3></div></div>
         <div id="agentTasks" style="display:grid;gap:8px"></div>
       </div>
     </div>`;
@@ -254,16 +283,34 @@ export function initAgent() {
   if (started) return;
   started = true;
   injectAgentShell();
+
+  $('#agentMissionForm')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const goal = $('#agentMission')?.value?.trim();
+    const button = $('#agentMissionGo');
+    if (!goal) return;
+    if (button) button.disabled = true;
+    try {
+      await queueBrowserScout(goal);
+      $('#agentMission').value = '';
+    } catch (error) {
+      toast(error.message, { type: 'error' });
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
+
   $('#agentAutoVerify')?.addEventListener('change', (event) => {
     try { localStorage.setItem(AUTO_KEY, event.target.checked ? 'on' : 'off'); } catch {}
     if (event.target.checked) {
-      autoQueueNote = pendingAutoItems.length ? 'Automatic verification enabled; checking the latest Hunt…' : 'Automatic verification enabled.';
+      autoQueueNote = pendingScoutGoal ? 'Automatic supplier surfing enabled; checking the latest Hunt…' : 'Automatic supplier surfing enabled.';
       refreshStatus().catch(() => {});
     } else {
-      autoQueueNote = 'Automatic supplier verification is turned off.';
+      autoQueueNote = 'Automatic Browser Scout after Hunt is turned off.';
     }
     renderAgent();
-    toast(event.target.checked ? 'Automatic supplier verification enabled' : 'Automatic supplier verification disabled', { type: 'info', duration: 1500 });
+    toast(event.target.checked ? 'Automatic Browser Scout enabled' : 'Automatic Browser Scout disabled', { type: 'info', duration: 1500 });
   });
+
   startPolling();
 }

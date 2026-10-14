@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
 const args = process.argv.slice(2);
 
 function arg(name, fallback = '') {
@@ -43,7 +43,7 @@ function assertAllowedUrl(value) {
     throw new Error(hostMatches(host, 'depop.com') ? 'Depop browser control is disabled.' : 'Temu stays search-only in FlipLab.');
   }
   if (!allowedHosts.some((base) => hostMatches(host, base))) {
-    throw new Error('Browser Agent v1 only verifies AliExpress and DHgate pages.');
+    throw new Error('Browser Agent only browses approved supplier sites.');
   }
   return url;
 }
@@ -100,8 +100,8 @@ async function parseJsonLd(page) {
 }
 
 async function collectObservation(page, requestedUrl) {
-  await page.waitForTimeout(1200);
-  await page.waitForLoadState('networkidle', { timeout: 4500 }).catch(() => {});
+  await page.waitForTimeout(900);
+  await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
 
   const finalUrl = page.url();
   assertAllowedUrl(finalUrl);
@@ -178,7 +178,155 @@ async function verifySupplier(task) {
   }
 }
 
-async function failTask(task, error) {
+const SITE = {
+  AliExpress: {
+    home: 'https://www.aliexpress.us/',
+    isProduct: (url) => /\/item\//i.test(url.pathname) || /item\/.+\.html/i.test(url.pathname),
+    fallback: (query) => `https://www.aliexpress.us/w/wholesale-${encodeURIComponent(query.trim().replace(/\s+/g, '-'))}.html`
+  },
+  DHgate: {
+    home: 'https://www.dhgate.com/',
+    isProduct: (url) => /\/product\//i.test(url.pathname),
+    fallback: (query) => `https://www.dhgate.com/wholesale/search.do?searchkey=${encodeURIComponent(query)}`
+  }
+};
+
+async function visibleSearchInput(page) {
+  const locator = page.locator('input[type="search"], input[name*="search" i], input[placeholder*="search" i], input[aria-label*="search" i]');
+  const count = Math.min(await locator.count().catch(() => 0), 12);
+  for (let i = 0; i < count; i += 1) {
+    const candidate = locator.nth(i);
+    if (await candidate.isVisible().catch(() => false)) return candidate;
+  }
+  return null;
+}
+
+async function collectProductLinks(page, siteName, limit) {
+  const config = SITE[siteName];
+  const raw = await page.locator('a[href]').evaluateAll((links) => links.slice(0, 1500).map((a) => ({
+    href: a.href,
+    text: String(a.innerText || a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600)
+  }))).catch(() => []);
+  const seen = new Set();
+  const results = [];
+  for (const entry of raw) {
+    if (!entry.href || seen.has(entry.href)) continue;
+    let url;
+    try { url = assertAllowedUrl(entry.href); } catch { continue; }
+    if (!config.isProduct(url)) continue;
+    seen.add(entry.href);
+    results.push({ url: url.href, text: entry.text });
+    if (results.length >= limit) break;
+  }
+  return results;
+}
+
+async function searchSupplierSite(page, siteName, query, maxResults) {
+  const config = SITE[siteName];
+  console.log(`[FlipLab Scout] ${siteName}: searching “${query}”`);
+  await page.goto(config.home, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await page.waitForTimeout(1000);
+
+  let usedSearchBox = false;
+  const input = await visibleSearchInput(page);
+  if (input) {
+    try {
+      await input.click();
+      await input.fill(query);
+      await input.press('Enter');
+      usedSearchBox = true;
+      await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => {});
+    } catch (error) {
+      console.warn(`[FlipLab Scout] ${siteName} search box failed; using search URL fallback: ${error.message}`);
+    }
+  }
+  if (!usedSearchBox) {
+    await page.goto(config.fallback(query), { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  }
+
+  assertAllowedUrl(page.url());
+  for (let i = 0; i < 4; i += 1) {
+    await page.mouse.wheel(0, 950).catch(() => {});
+    await page.waitForTimeout(600);
+  }
+  const body = await page.locator('body').innerText({ timeout: 8000 }).catch(() => '');
+  if (/captcha|verify you are human|security verification|unusual traffic/i.test(body)) {
+    console.warn(`[FlipLab Scout] ${siteName} displayed a verification challenge; not bypassing it.`);
+  }
+  const results = await collectProductLinks(page, siteName, maxResults);
+  console.log(`[FlipLab Scout] ${siteName}: found ${results.length} product links`);
+  return { site: siteName, query, url: page.url(), usedSearchBox, results };
+}
+
+async function scoutSuppliers(task) {
+  const plan = task.payload?.plan || {};
+  const queries = Array.isArray(plan.queries) && plan.queries.length ? plan.queries.slice(0, 4) : [task.payload?.goal || task.goal];
+  const sites = (task.payload?.sites || ['AliExpress', 'DHgate']).filter((site) => SITE[site]);
+  const maxResults = Math.max(5, Math.min(30, Number(task.payload?.maxResultsPerSearch) || 18));
+  const maxProducts = Math.max(1, Math.min(10, Number(task.payload?.maxProductsToInspect) || 6));
+  const page = await context.newPage();
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(45_000);
+
+  const searches = [];
+  const candidateMap = new Map();
+  const products = [];
+  const warnings = [];
+
+  try {
+    console.log(`[FlipLab Scout] Mission: ${task.payload?.goal || task.goal}`);
+    console.log(`[FlipLab Scout] Queries: ${queries.join(' | ')}`);
+
+    for (const siteName of sites) {
+      for (const query of queries) {
+        if (stopping) break;
+        try {
+          const search = await searchSupplierSite(page, siteName, query, maxResults);
+          searches.push({ site: siteName, query, url: search.url, resultCount: search.results.length, usedSearchBox: search.usedSearchBox });
+          for (const result of search.results) {
+            if (!candidateMap.has(result.url)) candidateMap.set(result.url, { ...result, source: siteName, query });
+          }
+        } catch (error) {
+          warnings.push(`${siteName} search failed for “${query}”: ${error.message}`);
+          console.warn(`[FlipLab Scout] ${warnings.at(-1)}`);
+        }
+      }
+    }
+
+    const candidates = [...candidateMap.values()].slice(0, maxProducts);
+    console.log(`[FlipLab Scout] Inspecting ${candidates.length} promising product pages…`);
+    for (const [index, candidate] of candidates.entries()) {
+      if (stopping) break;
+      try {
+        console.log(`[FlipLab Scout] Opening ${index + 1}/${candidates.length} ${candidate.source}: ${candidate.url}`);
+        await page.goto(candidate.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+        const observation = await collectObservation(page, candidate.url);
+        products.push({
+          source: candidate.source,
+          query: candidate.query,
+          url: observation.finalUrl || candidate.url,
+          title: observation.title || candidate.text || 'Supplier product',
+          searchText: candidate.text,
+          observation
+        });
+      } catch (error) {
+        warnings.push(`Could not inspect ${candidate.url}: ${error.message}`);
+        console.warn(`[FlipLab Scout] ${warnings.at(-1)}`);
+      }
+    }
+
+    await post(`/api/agent/scout/${encodeURIComponent(task.id)}/complete`, {
+      bridgeId,
+      claimToken: task.claimToken,
+      report: { searches, products, warnings }
+    }, 25_000);
+    console.log(`[FlipLab Scout] Finished surfing. Inspected ${products.length} products; FlipLab AI is ranking them.`);
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+async function failVerificationTask(task, error) {
   console.error(`[FlipLab Agent] Task failed: ${error.message}`);
   try {
     await post(`/api/agent/tasks/${encodeURIComponent(task.id)}/fail`, {
@@ -191,13 +339,24 @@ async function failTask(task, error) {
   }
 }
 
+async function failScoutTask(task, error) {
+  console.error(`[FlipLab Scout] Mission failed: ${error.message}`);
+  try {
+    await post(`/api/agent/scout/${encodeURIComponent(task.id)}/fail`, {
+      bridgeId,
+      claimToken: task.claimToken,
+      error: error.message
+    }, 10_000);
+  } catch (reportError) {
+    console.error(`[FlipLab Scout] Could not report failure: ${reportError.message}`);
+  }
+}
+
 async function shutdown() {
   if (stopping) return;
   stopping = true;
   console.log('\n[FlipLab Agent] Stopping…');
   if (ownsContext) await context?.close().catch(() => {});
-  // In CDP mode we are attached to someone else's browser. Let process exit
-  // without sending Browser.close so the user's existing Chrome/Chromium stays open.
   process.exit(0);
 }
 
@@ -206,25 +365,29 @@ process.on('SIGTERM', shutdown);
 
 async function main() {
   console.log(`[FlipLab Agent] Server: ${server}`);
-  console.log('[FlipLab Agent] Policy: supplier verification only · no purchases · no messages · no Depop control · no CAPTCHA bypass');
+  console.log('[FlipLab Agent] Policy: read-only supplier research · no purchases · no messages · no Depop control · no CAPTCHA bypass');
   const mode = await connectBrowser();
   await heartbeat(mode);
-  console.log(`[FlipLab Agent] Connected as ${bridgeId}. Waiting for tasks…`);
+  console.log(`[FlipLab Agent] Connected as ${bridgeId}. Waiting for missions…`);
 
-  let lastHeartbeat = 0;
+  const heartbeatTimer = setInterval(() => heartbeat(mode).catch(() => {}), 5000);
+  heartbeatTimer.unref?.();
+
   while (!stopping) {
     try {
-      if (Date.now() - lastHeartbeat > 5000) {
-        await heartbeat(mode);
-        lastHeartbeat = Date.now();
+      const scout = await post('/api/agent/scout/claim', { bridgeId, mode, version: VERSION }, 10_000);
+      if (scout) {
+        try { await scoutSuppliers(scout); } catch (error) { await failScoutTask(scout, error); }
+        continue;
       }
+
       const task = await post('/api/agent/bridge/claim', { bridgeId, mode, version: VERSION }, 10_000);
       if (!task) {
         await sleep(900);
         continue;
       }
       if (task.type !== 'verify_supplier') throw new Error(`Unsupported task type: ${task.type}`);
-      try { await verifySupplier(task); } catch (error) { await failTask(task, error); }
+      try { await verifySupplier(task); } catch (error) { await failVerificationTask(task, error); }
     } catch (error) {
       console.error(`[FlipLab Agent] ${error.message}`);
       await sleep(2500);
