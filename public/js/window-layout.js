@@ -36,6 +36,11 @@ export function defaultDesktopLayout(width = 1280, height = 720) {
       minimized: false,
       maximized: false
     },
+    agent: {
+      ...clampWindowRect({ left: Math.round(w * 0.18), top: 48, width: Math.round(w * 0.64), height: Math.round(h * 0.74) }, { width: w, height: h }),
+      minimized: true,
+      maximized: false
+    },
     settings: {
       ...clampWindowRect({ left: Math.round(w * 0.24), top: 38, width: Math.round(w * 0.56), height: Math.round(h * 0.76) }, { width: w, height: h }),
       minimized: true,

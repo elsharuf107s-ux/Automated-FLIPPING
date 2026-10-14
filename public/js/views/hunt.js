@@ -1,6 +1,12 @@
 import { $, esc, money } from '../util.js';
 import { api } from '../data.js';
 import { icon, toast, busy } from '../ui.js';
+import {
+  autoVerifySuppliers,
+  getSupplierVerification,
+  isBrowserAgentConnected,
+  queueSupplierVerification
+} from './agent.js';
 
 const EXAMPLES = [
   'Find vintage Nike or Adidas jackets under $40 with public buyer interest like bids, watchers, likes, or offers',
@@ -17,38 +23,32 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function injectHuntUi() {
   if ($('#huntForm')) return;
   const view = $('#view-finder');
-  const setup = $('#finderSetup');
   const wrapper = document.createElement('div');
   wrapper.id = 'huntWorkspace';
   wrapper.innerHTML = `
     <form class="panel finder-form" id="huntForm" autocomplete="off" style="margin-bottom:18px">
       <div class="panel-head">
-        <div><p class="eyebrow">AI Hunt · clothing + demand + supplier compare</p><h3>Tell FlipLab what clothing to find</h3></div>
-        <span class="status-chip ok">3-stage hunt</span>
+        <div><p class="eyebrow">AI Hunt · demand + supplier compare + local verification</p><h3>Tell FlipLab what clothing to find</h3></div>
+        <span class="status-chip ok">agent-ready hunt</span>
       </div>
       <label style="display:grid;gap:8px">
-        <span class="field-note">Write it normally. FlipLab finds clothing with buyer activity or weak/generic listings, then checks AliExpress, DHgate and Temu for cheaper clothing matches.</span>
+        <span class="field-note">Write it normally. FlipLab finds clothing with buyer activity or weak/generic listings, checks AliExpress, DHgate and Temu for cheaper matches, then the optional local Browser Agent can verify the strongest AliExpress/DHgate pages.</span>
         <textarea id="huntPrompt" name="prompt" rows="3" maxlength="1200" required minlength="3" placeholder="Find me work jackets under $40 with buyer activity, then find cheaper supplier versions…" style="width:100%;resize:vertical;min-height:92px"></textarea>
       </label>
       <div class="chips example-chips" id="huntExamples">
         ${EXAMPLES.map((example) => `<button class="chip" type="button" data-hunt-example="${esc(example)}">${esc(example)}</button>`).join('')}
       </div>
       <div class="form-actions split">
-        <span class="field-note small">Clothing only. Hunt checks public demand signals, generic gems, then supplier matches. Supplier matches are labeled Exact candidate / Similar / Generic and never inherit a brand just because they look alike.</span>
+        <span class="field-note small">Clothing only. Supplier matches are labeled Exact candidate / Similar / Generic and never inherit a brand just because they look alike. Local verification is read-only and never controls Depop.</span>
         <button class="btn btn-primary btn-lg" type="submit" id="huntGo">${icon('spark')}<span>Hunt clothing</span></button>
       </div>
     </form>
     <div class="finder-meta" id="huntMeta" hidden></div>
     <div id="huntResults"></div>
     <div class="panel guardrail" style="margin:18px 0">
-      ${icon('info')}<div><strong>Demand + supplier matching</strong><p>Buyer activity only counts when public evidence exposes it. Supplier matching compares garment type, cut, design, color, material and size information when available. A cheap lookalike is never treated as a branded item. Temu is used as search-only metadata rather than directly crawled by FlipLab.</p></div>
+      ${icon('info')}<div><strong>Search first, verify second</strong><p>Search results are leads, not final truth. When the local Browser Agent is connected, FlipLab can open AliExpress/DHgate pages on your Chromebook and re-check visible price, shipping, sizes, colors, material, stock and delivery. Temu remains search-only.</p></div>
     </div>`;
-  view.insertBefore(wrapper, setup);
-
-  if (setup) {
-    setup.querySelector('h3').textContent = 'Optional: connect eBay for the advanced eBay-only finder';
-    setup.querySelector('p').textContent = 'The AI clothing hunt above works with only your OpenAI key. Add eBay developer keys only if you want the older eBay API filters, market median, and bulk eBay analysis below.';
-  }
+  view.appendChild(wrapper);
 }
 
 function priceText(item) {
@@ -106,12 +106,35 @@ function supplierMatchLabel(supplier) {
   return 'Similar match';
 }
 
-function supplierHtml(item, itemIndex) {
+function verificationHtml(verification) {
+  if (!verification) return '';
+  const facts = [
+    verification.price != null ? `Price ${money(verification.price)}` : '',
+    verification.shipping != null ? `Shipping ${money(verification.shipping)}` : '',
+    verification.sizes?.length ? `Sizes ${verification.sizes.slice(0, 6).join(', ')}` : '',
+    verification.colors?.length ? `Colors ${verification.colors.slice(0, 4).join(', ')}` : '',
+    verification.material ? verification.material : '',
+    verification.delivery ? verification.delivery : '',
+    verification.inStock === true ? 'In stock' : verification.inStock === false ? 'Out of stock' : ''
+  ].filter(Boolean);
+  const evidence = Array.isArray(verification.evidence) ? verification.evidence.slice(0, 3) : [];
+  return `<div class="copy-box" style="margin-top:10px">
+    <h4>${icon('check')} Verified by your local browser</h4>
+    <div class="chips" style="margin-top:7px"><span class="badge buy">${Math.round((Number(verification.confidence) || 0) * 100)}% confidence</span>${facts.slice(0, 3).map((fact) => `<span class="badge">${esc(fact)}</span>`).join('')}</div>
+    ${facts.length > 3 ? `<p class="field-note" style="margin-top:7px">${esc(facts.slice(3).join(' · '))}</p>` : ''}
+    ${evidence.length ? `<p class="field-note" style="margin-top:7px"><b>Evidence:</b> ${esc(evidence.join(' · '))}</p>` : ''}
+    ${verification.warnings?.length ? `<p class="field-note" style="margin-top:7px"><b>Check:</b> ${esc(verification.warnings.slice(0, 2).join(' · '))}</p>` : ''}
+  </div>`;
+}
+
+function supplierHtml(item) {
   const supplier = item.bestSupplier;
   if (!supplier) {
     return `<div class="panel" style="margin-top:12px;padding:12px"><div class="field-note"><b>No cheaper supplier match found yet.</b> The resale candidate still works normally.</div></div>`;
   }
 
+  const verification = supplier.verification || getSupplierVerification(supplier.url);
+  if (verification && !supplier.verification) supplier.verification = verification;
   const savings = Number(supplier.savings);
   const savingsText = Number.isFinite(savings) && savings > 0
     ? `${money(savings)} cheaper${Number.isFinite(Number(supplier.savingsPercent)) ? ` · ${supplier.savingsPercent}% less` : ''}`
@@ -122,6 +145,11 @@ function supplierHtml(item, itemIndex) {
   const brandNote = supplier.brandSafety === 'list-as-generic'
     ? 'Keep this supplier item generic/unbranded unless you separately verify brand rights and authenticity.'
     : 'Supplier page names the same brand; authenticity still needs separate verification.';
+  const verifyButton = supplier.searchOnly
+    ? `<span class="badge">Temu · search-only</span>`
+    : verification
+      ? `<span class="badge buy">${icon('check')} Locally verified</span>`
+      : `<button class="btn btn-ghost btn-sm" type="button" data-hunt-action="verify" data-supplier-index="0">${icon('plug')}<span>${supplier.browserTaskId ? 'Verification queued' : isBrowserAgentConnected() ? 'Verify in local browser' : 'Queue browser verification'}</span></button>`;
 
   return `<div class="panel" style="margin-top:12px;padding:12px" data-supplier-box>
     <div class="panel-head" style="margin-bottom:8px">
@@ -133,9 +161,11 @@ function supplierHtml(item, itemIndex) {
     ${differences ? `<p class="field-note"><b>Differences:</b> ${esc(differences)}</p>` : ''}
     <p class="field-note"><b>Garment:</b> ${esc([supplier.garmentType, supplier.color, supplier.material, supplier.sizeRange].filter(Boolean).join(' · ') || 'Details not fully visible')}</p>
     <p class="field-note"><b>Brand safety:</b> ${esc(brandNote)}</p>
-    ${supplier.searchOnly ? '<p class="field-note"><b>Search-only source:</b> FlipLab is using public search metadata for this Temu result rather than directly crawling Temu.</p>' : ''}
+    ${supplier.searchOnly ? '<p class="field-note"><b>Search-only source:</b> FlipLab uses public search metadata for this Temu result and will not open Temu with the browser agent.</p>' : ''}
+    ${verificationHtml(verification)}
     <div class="deal-actions" style="padding-top:10px">
-      <button class="btn btn-primary btn-sm" type="button" data-hunt-action="supplier" data-supplier-index="0">${icon('spark')}<span>Build listing from supplier</span></button>
+      <button class="btn btn-primary btn-sm" type="button" data-hunt-action="supplier" data-supplier-index="0">${icon('spark')}<span>Build ready-to-post pack</span></button>
+      ${verifyButton}
       <a class="btn btn-ghost btn-sm" href="${esc(supplier.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open supplier</span></a>
     </div>
   </div>`;
@@ -163,12 +193,12 @@ function cardHtml(item, index) {
       <div class="deal-meta">${esc(meta)}</div>
       ${signalHtml(item)}
       <p class="seller-text" style="margin-top:10px">${esc(item.why || 'Matches your hunt prompt.')}</p>
-      ${preview ? `<p class="photo-note">${icon('info')}<span>Original listing image preview · reference only unless you own the rights or have permission to reuse it.</span></p>` : '<p class="field-note small">No source image was exposed in the page metadata. Scrape + analyze may still find listing photos.</p>'}
-      ${supplierHtml(item, index)}
+      ${preview ? `<p class="photo-note">${icon('info')}<span>Original listing image preview · reference only unless you own the rights or have permission to reuse it.</span></p>` : '<p class="field-note small">No source image was exposed in search metadata.</p>'}
+      ${supplierHtml(item)}
       <p class="field-note small" style="margin-top:10px"><b>${esc(item.middleman?.label || 'Check seller rules')}:</b> ${esc(item.middleman?.note || 'Verify the selling channel and supplier agreement before using a zero-inventory workflow.')}</p>
       <div class="deal-actions" style="margin-top:auto;padding-top:14px">
-        <button class="btn btn-primary btn-sm" type="button" data-hunt-action="analyze">${icon('spark')}<span>Analyze resale listing</span></button>
-        <a class="btn btn-ghost btn-sm" href="${esc(item.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open listing</span></a>
+        <button class="btn btn-ghost btn-sm" type="button" data-hunt-action="analyze">${icon('spark')}<span>Analyze reference listing</span></button>
+        <a class="btn btn-ghost btn-sm" href="${esc(item.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open reference</span></a>
       </div>
     </div>
   </article>`;
@@ -189,7 +219,8 @@ function renderHunt() {
   const active = r.demandSummary?.active ?? r.items.filter((item) => item.buyerInterest?.hasPublicSignal).length;
   const generic = r.demandSummary?.generic ?? r.items.filter((item) => item.genericOpportunity?.isGeneric).length;
   const supplierMatched = r.supplierSummary?.matchedItems ?? r.items.filter((item) => item.bestSupplier).length;
-  meta.innerHTML = `<div><b>${r.items.length}</b> clothing matches · <b>${active}</b> with buyer activity · <b>${generic}</b> generic gems · <b>${supplierMatched}</b> with cheaper supplier matches · <b>${pictured}</b> with images <span class="muted">(${esc(r.model)})</span>${r.supplierWarning ? ` <span class="muted">· supplier search partial</span>` : ''}</div>`;
+  const verifiedCount = r.items.filter((item) => item.bestSupplier && (item.bestSupplier.verification || getSupplierVerification(item.bestSupplier.url))).length;
+  meta.innerHTML = `<div><b>${r.items.length}</b> clothing matches · <b>${active}</b> with buyer activity · <b>${generic}</b> generic gems · <b>${supplierMatched}</b> cheaper supplier matches · <b>${verifiedCount}</b> locally verified · <b>${pictured}</b> with images <span class="muted">(${esc(r.model)})</span>${r.supplierWarning ? ` <span class="muted">· supplier search partial</span>` : ''}</div>`;
 
   if (!r.items.length) {
     results.innerHTML = `<div class="empty finder-empty">${icon('search')}<strong>No strong clothing listings found</strong>Try a broader budget, fewer brand restrictions, or a more common garment.</div>`;
@@ -237,6 +268,7 @@ async function runHunt(prompt) {
     hunt.result = result;
     hunt.prompt = prompt;
     renderHunt();
+    autoVerifySuppliers(hunt.result.items).catch(() => {});
     toast(hunt.result.items.length ? `Found ${hunt.result.items.length} clothing matches` : 'No strong clothing matches found', { type: hunt.result.items.length ? 'success' : 'info' });
   } catch (error) {
     if (version !== hunt.runVersion) return;
@@ -271,36 +303,46 @@ function sendToScanner(item) {
   ].filter(Boolean).join('\n');
   form.dispatchEvent(new Event('input', { bubbles: true }));
   focusScanner();
-  toast('Opening the resale listing in AI Scanner…', { type: 'info', duration: 1800 });
+  toast('Opening the reference listing in Ready to Post…', { type: 'info', duration: 1800 });
   setTimeout(() => $('#analyzeBtn')?.click(), 120);
 }
 
 function sendSupplierToScanner(item, supplier) {
   const form = $('#scanForm');
   if (!form || !supplier) return;
+  const verified = supplier.verification || getSupplierVerification(supplier.url);
+  const verifiedPrice = verified?.price ?? supplier.price;
+  const verifiedShipping = verified?.shipping ?? supplier.shipping;
 
-  // Supplier mode uses the structured search result rather than automatically crawling the supplier site.
-  // This keeps Temu search-only and makes the workflow resilient when supplier sites block headless browsers.
+  // The supplier URL stays in notes instead of Source URL so Ready to Post does not
+  // trigger a second cloud scrape after the Chromebook browser already verified it.
   form.elements.sourceUrl.value = '';
-  form.elements.title.value = supplier.title || supplier.garmentType || item.title || '';
+  form.elements.title.value = verified?.title || supplier.title || supplier.garmentType || item.title || '';
   if (form.elements.brand) form.elements.brand.value = '';
   if (form.elements.category) form.elements.category.value = supplier.garmentType || 'Clothing';
-  if (form.elements.purchasePrice && supplier.price != null) form.elements.purchasePrice.value = supplier.price;
-  if (form.elements.inboundShipping && supplier.shipping != null) form.elements.inboundShipping.value = supplier.shipping;
+  if (form.elements.size && verified?.sizes?.length) form.elements.size.value = verified.sizes.join(', ').slice(0, 40);
+  if (form.elements.purchasePrice && verifiedPrice != null) form.elements.purchasePrice.value = verifiedPrice;
+  if (form.elements.inboundShipping && verifiedShipping != null) form.elements.inboundShipping.value = verifiedShipping;
   if (form.elements.targetPrice && item.price != null) form.elements.targetPrice.value = item.price;
   if (form.elements.source) form.elements.source.value = supplier.source || 'Supplier';
 
   form.elements.notes.value = [
-    `Supplier clothing match found by AI Hunt: ${supplier.url}`,
+    `Supplier clothing match: ${supplier.url}`,
     `Supplier: ${supplier.source}`,
     `Match: ${supplierMatchLabel(supplier)} (${supplier.matchConfidence}% confidence)`,
     supplier.why ? `Why it matches: ${supplier.why}` : '',
-    supplier.garmentType ? `Garment: ${supplier.garmentType}` : '',
-    supplier.color ? `Color: ${supplier.color}` : '',
-    supplier.material ? `Material: ${supplier.material}` : '',
-    supplier.sizeRange ? `Size range: ${supplier.sizeRange}` : '',
+    verified ? `Local browser verification: ${Math.round((Number(verified.confidence) || 0) * 100)}% confidence` : 'Local browser verification: not completed yet',
+    verified?.price != null ? `Verified price: ${money(verified.price)}` : '',
+    verified?.shipping != null ? `Verified shipping: ${money(verified.shipping)}` : '',
+    verified?.sizes?.length ? `Verified sizes: ${verified.sizes.join(', ')}` : supplier.sizeRange ? `Search size range: ${supplier.sizeRange}` : '',
+    verified?.colors?.length ? `Verified colors: ${verified.colors.join(', ')}` : supplier.color ? `Search color: ${supplier.color}` : '',
+    verified?.material ? `Verified material: ${verified.material}` : supplier.material ? `Search material: ${supplier.material}` : '',
+    verified?.stockText ? `Stock: ${verified.stockText}` : verified?.inStock === true ? 'Stock: in stock' : verified?.inStock === false ? 'Stock: out of stock' : '',
+    verified?.delivery ? `Delivery: ${verified.delivery}` : '',
+    verified?.evidence?.length ? `Verification evidence: ${verified.evidence.join('; ')}` : '',
+    verified?.warnings?.length ? `Verification warnings: ${verified.warnings.join('; ')}` : '',
     supplier.differences?.length ? `Differences: ${supplier.differences.join('; ')}` : '',
-    supplier.savings != null ? `Supplier savings vs reference listing: ${money(supplier.savings)}` : '',
+    supplier.savings != null ? `Search-estimated savings vs reference listing: ${money(supplier.savings)}` : '',
     `Reference resale-market listing: ${item.url}`,
     item.price != null ? `Reference asking price: ${money(item.price)}` : '',
     supplier.brandSafety === 'list-as-generic'
@@ -311,8 +353,18 @@ function sendSupplierToScanner(item, supplier) {
 
   form.dispatchEvent(new Event('input', { bubbles: true }));
   focusScanner();
-  toast('Supplier clothing loaded into Scanner…', { type: 'success', duration: 1800 });
+  toast(verified ? 'Verified supplier loaded into Ready to Post' : 'Supplier loaded into Ready to Post', { type: 'success', duration: 1800 });
   setTimeout(() => $('#analyzeBtn')?.click(), 120);
+}
+
+async function verifySupplier(item, supplier) {
+  try {
+    const task = await queueSupplierVerification(supplier, item);
+    supplier.browserTaskId = task.id;
+    renderHunt();
+  } catch (error) {
+    toast(error.message, { type: 'error' });
+  }
 }
 
 export function initHunt() {
@@ -338,9 +390,20 @@ export function initHunt() {
     if (!item) return;
 
     if (button.dataset.huntAction === 'analyze') sendToScanner(item);
-    if (button.dataset.huntAction === 'supplier') {
-      const supplier = item.supplierMatches?.[Number(button.dataset.supplierIndex || 0)];
-      if (supplier) sendSupplierToScanner(item, supplier);
+    const supplier = item.supplierMatches?.[Number(button.dataset.supplierIndex || 0)];
+    if (button.dataset.huntAction === 'supplier' && supplier) sendSupplierToScanner(item, supplier);
+    if (button.dataset.huntAction === 'verify' && supplier) verifySupplier(item, supplier);
+  });
+
+  window.addEventListener('fliplab:agent-verified', (event) => {
+    if (!hunt.result) return;
+    for (const item of hunt.result.items) {
+      for (const supplier of item.supplierMatches || []) {
+        if (supplier.url === event.detail?.url) supplier.verification = event.detail.result;
+      }
+      if (item.bestSupplier?.url === event.detail?.url) item.bestSupplier.verification = event.detail.result;
     }
+    renderHunt();
+    toast('Local supplier verification finished', { type: 'success', duration: 1800 });
   });
 }
