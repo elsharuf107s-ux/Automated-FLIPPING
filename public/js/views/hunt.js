@@ -5,11 +5,11 @@ import { icon, toast, busy } from '../ui.js';
 const EXAMPLES = [
   'Find vintage Nike or Adidas jackets under $40 with public buyer interest like bids, watchers, likes, or offers',
   'Find generic or badly titled work jackets under $40 that might be undervalued',
-  'Find men\'s sneakers under $50 with visible buyer activity plus generic listings other people may miss',
+  'Find hoodies and sweatshirts under $30 with visible buyer activity plus generic listings people may miss',
   'Find Y2K clothing under $30 with strong public demand signals or vague titles'
 ];
 const POLL_INTERVAL_MS = 1250;
-const HUNT_DEADLINE_MS = 75_000;
+const HUNT_DEADLINE_MS = 140_000;
 
 const hunt = { result: null, prompt: '', runVersion: 0 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -23,31 +23,31 @@ function injectHuntUi() {
   wrapper.innerHTML = `
     <form class="panel finder-form" id="huntForm" autocomplete="off" style="margin-bottom:18px">
       <div class="panel-head">
-        <div><p class="eyebrow">AI Hunt · demand + hidden-value mode</p><h3>Tell FlipLab what to find</h3></div>
-        <span class="status-chip ok">2-lane search</span>
+        <div><p class="eyebrow">AI Hunt · clothing + demand + supplier compare</p><h3>Tell FlipLab what clothing to find</h3></div>
+        <span class="status-chip ok">3-stage hunt</span>
       </div>
       <label style="display:grid;gap:8px">
-        <span class="field-note">Write it normally. Every hunt now checks two lanes: listings with public buyer activity and generic/poorly titled listings that could be undervalued.</span>
-        <textarea id="huntPrompt" name="prompt" rows="3" maxlength="1200" required minlength="3" placeholder="Find me work jackets under $40 with watchers, likes, bids, offers, or generic titles people may overlook…" style="width:100%;resize:vertical;min-height:92px"></textarea>
+        <span class="field-note">Write it normally. FlipLab finds clothing with buyer activity or weak/generic listings, then checks AliExpress, DHgate and Temu for cheaper clothing matches.</span>
+        <textarea id="huntPrompt" name="prompt" rows="3" maxlength="1200" required minlength="3" placeholder="Find me work jackets under $40 with buyer activity, then find cheaper supplier versions…" style="width:100%;resize:vertical;min-height:92px"></textarea>
       </label>
       <div class="chips example-chips" id="huntExamples">
         ${EXAMPLES.map((example) => `<button class="chip" type="button" data-hunt-example="${esc(example)}">${esc(example)}</button>`).join('')}
       </div>
       <div class="form-actions split">
-        <span class="field-note small">FlipLab searches the supported marketplaces, prioritizes verified public buyer-interest signals when available, and also tries generic wording, misspellings, missing brands/models, and vague titles. Unknown activity stays unknown.</span>
-        <button class="btn btn-primary btn-lg" type="submit" id="huntGo">${icon('spark')}<span>Hunt everywhere</span></button>
+        <span class="field-note small">Clothing only. Hunt checks public demand signals, generic gems, then supplier matches. Supplier matches are labeled Exact candidate / Similar / Generic and never inherit a brand just because they look alike.</span>
+        <button class="btn btn-primary btn-lg" type="submit" id="huntGo">${icon('spark')}<span>Hunt clothing</span></button>
       </div>
     </form>
     <div class="finder-meta" id="huntMeta" hidden></div>
     <div id="huntResults"></div>
     <div class="panel guardrail" style="margin:18px 0">
-      ${icon('info')}<div><strong>What “buyer activity” means</strong><p>FlipLab only counts activity the public listing/search evidence actually exposes: offers already made, bids, watchers, likes, or people with the item in a cart/bag. A <b>Make Offer</b> button by itself does not count. Engagement can strengthen demand confidence, but it does not guarantee a future sale.</p></div>
+      ${icon('info')}<div><strong>Demand + supplier matching</strong><p>Buyer activity only counts when public evidence exposes it. Supplier matching compares garment type, cut, design, color, material and size information when available. A cheap lookalike is never treated as a branded item. Temu is used as search-only metadata rather than directly crawled by FlipLab.</p></div>
     </div>`;
   view.insertBefore(wrapper, setup);
 
   if (setup) {
     setup.querySelector('h3').textContent = 'Optional: connect eBay for the advanced eBay-only finder';
-    setup.querySelector('p').textContent = 'AI Hunt above works with only your OpenAI key. Add eBay developer keys only if you want the older eBay API filters, market median, and bulk eBay analysis below.';
+    setup.querySelector('p').textContent = 'The AI clothing hunt above works with only your OpenAI key. Add eBay developer keys only if you want the older eBay API filters, market median, and bulk eBay analysis below.';
   }
 }
 
@@ -93,6 +93,54 @@ function signalHtml(item) {
   ${d.evidence?.length ? `<p class="field-note" style="margin-top:7px"><b>Public activity evidence:</b> ${esc(d.evidence.slice(0, 3).join(' · '))}</p>` : ''}`;
 }
 
+function supplierPriceText(supplier) {
+  if (supplier.price == null) return 'Supplier price not visible';
+  const base = supplier.currency && supplier.currency !== 'USD' ? `${supplier.currency} ${supplier.price}` : money(supplier.price);
+  if (supplier.shipping == null) return base;
+  return `${base} · ${supplier.shipping === 0 ? 'free shipping' : `+ ${money(supplier.shipping)} ship`}`;
+}
+
+function supplierMatchLabel(supplier) {
+  if (supplier.matchType === 'exact') return 'Exact candidate';
+  if (supplier.matchType === 'generic') return 'Generic alternative';
+  return 'Similar match';
+}
+
+function supplierHtml(item, itemIndex) {
+  const supplier = item.bestSupplier;
+  if (!supplier) {
+    return `<div class="panel" style="margin-top:12px;padding:12px"><div class="field-note"><b>No cheaper supplier match found yet.</b> The resale candidate still works normally.</div></div>`;
+  }
+
+  const savings = Number(supplier.savings);
+  const savingsText = Number.isFinite(savings) && savings > 0
+    ? `${money(savings)} cheaper${Number.isFinite(Number(supplier.savingsPercent)) ? ` · ${supplier.savingsPercent}% less` : ''}`
+    : 'Cheaper supplier candidate';
+  const differences = Array.isArray(supplier.differences) && supplier.differences.length
+    ? supplier.differences.slice(0, 3).join(' · ')
+    : '';
+  const brandNote = supplier.brandSafety === 'list-as-generic'
+    ? 'Keep this supplier item generic/unbranded unless you separately verify brand rights and authenticity.'
+    : 'Supplier page names the same brand; authenticity still needs separate verification.';
+
+  return `<div class="panel" style="margin-top:12px;padding:12px" data-supplier-box>
+    <div class="panel-head" style="margin-bottom:8px">
+      <div><p class="eyebrow">Cheaper supplier found</p><strong>${esc(supplier.source)} · ${esc(supplierMatchLabel(supplier))}</strong></div>
+      <span class="badge buy">${esc(String(supplier.matchConfidence))}% match</span>
+    </div>
+    <div class="deal-price"><strong>${esc(supplierPriceText(supplier))}</strong> <span class="muted">· ${esc(savingsText)}</span></div>
+    <p class="seller-text" style="margin-top:7px">${esc(supplier.why || 'Cheaper clothing supplier candidate.')}</p>
+    ${differences ? `<p class="field-note"><b>Differences:</b> ${esc(differences)}</p>` : ''}
+    <p class="field-note"><b>Garment:</b> ${esc([supplier.garmentType, supplier.color, supplier.material, supplier.sizeRange].filter(Boolean).join(' · ') || 'Details not fully visible')}</p>
+    <p class="field-note"><b>Brand safety:</b> ${esc(brandNote)}</p>
+    ${supplier.searchOnly ? '<p class="field-note"><b>Search-only source:</b> FlipLab is using public search metadata for this Temu result rather than directly crawling Temu.</p>' : ''}
+    <div class="deal-actions" style="padding-top:10px">
+      <button class="btn btn-primary btn-sm" type="button" data-hunt-action="supplier" data-supplier-index="0">${icon('spark')}<span>Build listing from supplier</span></button>
+      <a class="btn btn-ghost btn-sm" href="${esc(supplier.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open supplier</span></a>
+    </div>
+  </div>`;
+}
+
 function cardHtml(item, index) {
   const meta = [
     item.source,
@@ -116,9 +164,10 @@ function cardHtml(item, index) {
       ${signalHtml(item)}
       <p class="seller-text" style="margin-top:10px">${esc(item.why || 'Matches your hunt prompt.')}</p>
       ${preview ? `<p class="photo-note">${icon('info')}<span>Original listing image preview · reference only unless you own the rights or have permission to reuse it.</span></p>` : '<p class="field-note small">No source image was exposed in the page metadata. Scrape + analyze may still find listing photos.</p>'}
-      <p class="field-note small"><b>${esc(item.middleman?.label || 'Check seller rules')}:</b> ${esc(item.middleman?.note || 'Verify the selling channel and supplier agreement before using a zero-inventory workflow.')}</p>
+      ${supplierHtml(item, index)}
+      <p class="field-note small" style="margin-top:10px"><b>${esc(item.middleman?.label || 'Check seller rules')}:</b> ${esc(item.middleman?.note || 'Verify the selling channel and supplier agreement before using a zero-inventory workflow.')}</p>
       <div class="deal-actions" style="margin-top:auto;padding-top:14px">
-        <button class="btn btn-primary btn-sm" type="button" data-hunt-action="analyze">${icon('spark')}<span>Scrape + analyze</span></button>
+        <button class="btn btn-primary btn-sm" type="button" data-hunt-action="analyze">${icon('spark')}<span>Analyze resale listing</span></button>
         <a class="btn btn-ghost btn-sm" href="${esc(item.url)}" target="_blank" rel="noopener">${icon('external')}<span>Open listing</span></a>
       </div>
     </div>
@@ -139,10 +188,11 @@ function renderHunt() {
   const pictured = r.items.filter((item) => item.previewImages?.length).length;
   const active = r.demandSummary?.active ?? r.items.filter((item) => item.buyerInterest?.hasPublicSignal).length;
   const generic = r.demandSummary?.generic ?? r.items.filter((item) => item.genericOpportunity?.isGeneric).length;
-  meta.innerHTML = `<div><b>${r.items.length}</b> matches · <b>${active}</b> with public buyer activity · <b>${generic}</b> generic gems · <b>${pictured}</b> with images <span class="muted">(${esc(r.model)})</span></div>`;
+  const supplierMatched = r.supplierSummary?.matchedItems ?? r.items.filter((item) => item.bestSupplier).length;
+  meta.innerHTML = `<div><b>${r.items.length}</b> clothing matches · <b>${active}</b> with buyer activity · <b>${generic}</b> generic gems · <b>${supplierMatched}</b> with cheaper supplier matches · <b>${pictured}</b> with images <span class="muted">(${esc(r.model)})</span>${r.supplierWarning ? ` <span class="muted">· supplier search partial</span>` : ''}</div>`;
 
   if (!r.items.length) {
-    results.innerHTML = `<div class="empty finder-empty">${icon('search')}<strong>No strong direct listings found</strong>Try a broader budget, fewer brand restrictions, or a more common item.</div>`;
+    results.innerHTML = `<div class="empty finder-empty">${icon('search')}<strong>No strong clothing listings found</strong>Try a broader budget, fewer brand restrictions, or a more common garment.</div>`;
     return;
   }
 
@@ -167,10 +217,10 @@ async function pollHunt(jobId, version) {
     const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
     const meta = $('#huntMeta');
     meta.hidden = false;
-    meta.innerHTML = `<div><span class="pulse"></span> Searching buyer activity + generic gems + listing images… <span class="muted">${seconds}s</span></div>`;
+    meta.innerHTML = `<div><span class="pulse"></span> Finding clothing → checking demand → comparing AliExpress / DHgate / Temu… <span class="muted">${seconds}s</span></div>`;
     await sleep(POLL_INTERVAL_MS);
   }
-  throw new Error('AI Hunt is taking longer than expected. Try a more specific prompt.');
+  throw new Error('AI Hunt is taking longer than expected. Try a more specific clothing prompt.');
 }
 
 async function runHunt(prompt) {
@@ -187,7 +237,7 @@ async function runHunt(prompt) {
     hunt.result = result;
     hunt.prompt = prompt;
     renderHunt();
-    toast(hunt.result.items.length ? `Found ${hunt.result.items.length} listing matches` : 'No strong matches found', { type: hunt.result.items.length ? 'success' : 'info' });
+    toast(hunt.result.items.length ? `Found ${hunt.result.items.length} clothing matches` : 'No strong clothing matches found', { type: hunt.result.items.length ? 'success' : 'info' });
   } catch (error) {
     if (version !== hunt.runVersion) return;
     hunt.result = null;
@@ -197,6 +247,12 @@ async function runHunt(prompt) {
   } finally {
     if (version === hunt.runVersion) busy(button, false);
   }
+}
+
+function focusScanner() {
+  const scannerLauncher = document.querySelector('.nav-item[data-view="scanner"]');
+  if (scannerLauncher) scannerLauncher.click();
+  else location.hash = '#/scanner';
 }
 
 function sendToScanner(item) {
@@ -214,10 +270,48 @@ function sendToScanner(item) {
     item.middleman?.note ? `Middleman check: ${item.middleman.note}` : ''
   ].filter(Boolean).join('\n');
   form.dispatchEvent(new Event('input', { bubbles: true }));
-  const scannerLauncher = document.querySelector('.nav-item[data-view="scanner"]');
-  if (scannerLauncher) scannerLauncher.click();
-  else location.hash = '#/scanner';
-  toast('Opening the listing in AI Scanner…', { type: 'info', duration: 1800 });
+  focusScanner();
+  toast('Opening the resale listing in AI Scanner…', { type: 'info', duration: 1800 });
+  setTimeout(() => $('#analyzeBtn')?.click(), 120);
+}
+
+function sendSupplierToScanner(item, supplier) {
+  const form = $('#scanForm');
+  if (!form || !supplier) return;
+
+  // Supplier mode uses the structured search result rather than automatically crawling the supplier site.
+  // This keeps Temu search-only and makes the workflow resilient when supplier sites block headless browsers.
+  form.elements.sourceUrl.value = '';
+  form.elements.title.value = supplier.title || supplier.garmentType || item.title || '';
+  if (form.elements.brand) form.elements.brand.value = '';
+  if (form.elements.category) form.elements.category.value = supplier.garmentType || 'Clothing';
+  if (form.elements.purchasePrice && supplier.price != null) form.elements.purchasePrice.value = supplier.price;
+  if (form.elements.inboundShipping && supplier.shipping != null) form.elements.inboundShipping.value = supplier.shipping;
+  if (form.elements.targetPrice && item.price != null) form.elements.targetPrice.value = item.price;
+  if (form.elements.source) form.elements.source.value = supplier.source || 'Supplier';
+
+  form.elements.notes.value = [
+    `Supplier clothing match found by AI Hunt: ${supplier.url}`,
+    `Supplier: ${supplier.source}`,
+    `Match: ${supplierMatchLabel(supplier)} (${supplier.matchConfidence}% confidence)`,
+    supplier.why ? `Why it matches: ${supplier.why}` : '',
+    supplier.garmentType ? `Garment: ${supplier.garmentType}` : '',
+    supplier.color ? `Color: ${supplier.color}` : '',
+    supplier.material ? `Material: ${supplier.material}` : '',
+    supplier.sizeRange ? `Size range: ${supplier.sizeRange}` : '',
+    supplier.differences?.length ? `Differences: ${supplier.differences.join('; ')}` : '',
+    supplier.savings != null ? `Supplier savings vs reference listing: ${money(supplier.savings)}` : '',
+    `Reference resale-market listing: ${item.url}`,
+    item.price != null ? `Reference asking price: ${money(item.price)}` : '',
+    supplier.brandSafety === 'list-as-generic'
+      ? 'Brand rule: treat this supplier garment as generic/unbranded. Do not copy the reference listing brand or trademark.'
+      : 'Brand rule: supplier names the same brand, but authenticity and resale rights still require separate verification.',
+    supplier.searchOnly ? 'Temu result was discovered from public search metadata; FlipLab did not directly crawl Temu.' : ''
+  ].filter(Boolean).join('\n');
+
+  form.dispatchEvent(new Event('input', { bubbles: true }));
+  focusScanner();
+  toast('Supplier clothing loaded into Scanner…', { type: 'success', duration: 1800 });
   setTimeout(() => $('#analyzeBtn')?.click(), 120);
 }
 
@@ -237,10 +331,16 @@ export function initHunt() {
   });
 
   $('#huntResults').addEventListener('click', (event) => {
-    const button = event.target.closest('[data-hunt-action="analyze"]');
+    const button = event.target.closest('[data-hunt-action]');
     const card = event.target.closest('[data-hunt-index]');
     if (!button || !card || !hunt.result) return;
     const item = hunt.result.items[Number(card.dataset.huntIndex)];
-    if (item) sendToScanner(item);
+    if (!item) return;
+
+    if (button.dataset.huntAction === 'analyze') sendToScanner(item);
+    if (button.dataset.huntAction === 'supplier') {
+      const supplier = item.supplierMatches?.[Number(button.dataset.supplierIndex || 0)];
+      if (supplier) sendSupplierToScanner(item, supplier);
+    }
   });
 }
