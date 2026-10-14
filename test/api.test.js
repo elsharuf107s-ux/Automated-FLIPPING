@@ -1,9 +1,9 @@
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { useTempDataDir, PIXEL_PNG } from './helpers.js';
+import { useTempDataDir } from './helpers.js';
 
 await useTempDataDir();
-process.env.AI_PROVIDER = 'demo';
+delete process.env.OPENAI_API_KEY;
 const { app } = await import('../server.js');
 
 let server;
@@ -19,53 +19,45 @@ after(() => server.close());
 
 const json = (method, body) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-test('health reports AI status', async () => {
+test('health reports the focused OpenAI status', async () => {
   const res = await fetch(`${base}/api/health`);
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.ok, true);
-  assert.equal(body.ai.provider, 'demo');
+  assert.equal(body.ai.provider, 'openai');
+  assert.equal(body.ai.configured, false);
 });
 
-test('analyze returns a normalized demo report', async () => {
-  const res = await fetch(`${base}/api/analyze`, json('POST', { title: 'Jacket', brand: 'Carhartt', purchasePrice: 20 }));
+test('analyze returns a normalized fallback report without a key', async () => {
+  const res = await fetch(`${base}/api/analyze`, json('POST', { title: 'Work jacket', purchasePrice: 20 }));
   const body = await res.json();
   assert.equal(res.status, 200);
   assert.equal(body.mode, 'demo');
   assert.ok(['BUY', 'WATCH', 'PASS'].includes(body.decision));
   assert.ok(body.score >= 0 && body.score <= 100);
-  assert.ok(body.estimatedSaleHigh >= body.estimatedSaleLow);
+  assert.ok(body.depop?.description);
 });
 
-test('analyze requires some item info', async () => {
+test('analyze requires clothing info', async () => {
   const res = await fetch(`${base}/api/analyze`, json('POST', {}));
   assert.equal(res.status, 400);
 });
 
-test('item CRUD, re-analysis, photo serving and CSV export', async () => {
-  const created = await (await fetch(`${base}/api/items`, json('POST', { title: '=HYPERLINK("x")', purchasePrice: 10, targetPrice: 50, image: PIXEL_PNG }))).json();
-  assert.ok(created.id);
-
-  const photo = await fetch(`${base}${created.image}`);
-  assert.equal(photo.status, 200);
-  assert.equal(photo.headers.get('content-type'), 'image/png');
-
-  const patched = await (await fetch(`${base}/api/items/${created.id}`, json('PATCH', { status: 'sold', soldPrice: 60 }))).json();
-  assert.equal(patched.status, 'sold');
-  assert.ok(patched.soldAt);
-
-  const analyzed = await (await fetch(`${base}/api/items/${created.id}/analyze`, { method: 'POST' })).json();
-  assert.equal(analyzed.ai.mode, 'demo');
-
-  const csv = await (await fetch(`${base}/api/export.csv`)).text();
-  assert.match(csv, /title,brand/);
-  assert.match(csv, /'=HYPERLINK/, 'formula-like cells are escaped');
-
-  assert.equal((await fetch(`${base}/api/items/${created.id}`, { method: 'DELETE' })).status, 204);
-  assert.equal((await fetch(`${base}/api/items/${created.id}`)).status, 404);
+test('settings persist without inventory endpoints', async () => {
+  const saved = await (await fetch(`${base}/api/settings`, json('PATCH', {
+    marketplaceFeePercent: 2,
+    paymentFeePercent: 3.5,
+    defaultOutboundShipping: 7,
+    targetRoiPercent: 80
+  }))).json();
+  assert.equal(saved.defaultOutboundShipping, 7);
+  const read = await (await fetch(`${base}/api/settings`)).json();
+  assert.equal(read.targetRoiPercent, 80);
+  assert.equal((await fetch(`${base}/api/items`)).status, 404);
+  assert.equal((await fetch(`${base}/api/finder/search`, json('POST', {}))).status, 404);
 });
 
-test('ai-config never leaks the key', async () => {
+test('ai-config never leaks the OpenAI key', async () => {
   const key = 'sk-proj-supersecret-0123456789abcdef';
   const saved = await (await fetch(`${base}/api/ai-config`, json('PATCH', { openaiApiKey: key }))).text();
   assert.equal(saved.includes('supersecret'), false);
@@ -76,19 +68,26 @@ test('ai-config never leaks the key', async () => {
 });
 
 test('bad input returns JSON errors', async () => {
-  const bad = await fetch(`${base}/api/ai-config`, json('PATCH', { provider: 'nope' }));
+  const bad = await fetch(`${base}/api/ai-config`, json('PATCH', { provider: 'ollama' }));
   assert.equal(bad.status, 400);
-  assert.match((await bad.json()).error, /Unknown AI provider/);
+  assert.match((await bad.json()).error, /uses OpenAI/);
 
-  const malformed = await fetch(`${base}/api/items`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{oops' });
+  const malformed = await fetch(`${base}/api/analyze`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{oops'
+  });
   assert.equal(malformed.status, 400);
 
   const missing = await fetch(`${base}/api/does-not-exist`);
   assert.equal(missing.status, 404);
 });
 
-test('serves the app shell', async () => {
+test('serves the lean app shell', async () => {
   const res = await fetch(`${base}/`);
   assert.equal(res.status, 200);
-  assert.match(await res.text(), /FlipLab/);
+  const html = await res.text();
+  assert.match(html, /Hunt → Depop/);
+  assert.doesNotMatch(html, /Inventory/);
+  assert.doesNotMatch(html, /eBay connection/);
 });
