@@ -57,6 +57,38 @@ test('settings persist without inventory endpoints', async () => {
   assert.equal((await fetch(`${base}/api/finder/search`, json('POST', {}))).status, 404);
 });
 
+test('browser agent queues supported supplier verification and blocks disallowed sites', async () => {
+  const queuedRes = await fetch(`${base}/api/agent/verify`, json('POST', {
+    supplier: {
+      source: 'AliExpress',
+      title: 'Canvas jacket',
+      url: 'https://www.aliexpress.com/item/100500999.html',
+      price: 15,
+      shipping: 2
+    },
+    reference: { title: 'Work jacket', price: 45 }
+  }));
+  assert.equal(queuedRes.status, 202);
+  const queued = await queuedRes.json();
+  assert.equal(queued.status, 'queued');
+
+  const status = await (await fetch(`${base}/api/agent/status`)).json();
+  assert.equal(status.bridge, null);
+  assert.ok(status.tasks.some((task) => task.id === queued.id));
+
+  const temu = await fetch(`${base}/api/agent/verify`, json('POST', {
+    supplier: { source: 'Temu', url: 'https://www.temu.com/example.html' }
+  }));
+  assert.equal(temu.status, 400);
+  assert.match((await temu.json()).error, /search-only/i);
+
+  const depop = await fetch(`${base}/api/agent/verify`, json('POST', {
+    supplier: { source: 'Depop', url: 'https://www.depop.com/products/example/' }
+  }));
+  assert.equal(depop.status, 400);
+  assert.match((await depop.json()).error, /never controlled/i);
+});
+
 test('ai-config never leaks the OpenAI key', async () => {
   const key = 'sk-proj-supersecret-0123456789abcdef';
   const saved = await (await fetch(`${base}/api/ai-config`, json('PATCH', { openaiApiKey: key }))).text();
