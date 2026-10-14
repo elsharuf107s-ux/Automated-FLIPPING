@@ -1,12 +1,13 @@
 {
   "name": "automated-flipping",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "AI clothing hunt, supplier matching, and ready-to-post Depop listing builder.",
+  "description": "AI clothing hunt, local supplier verification, and ready-to-post Depop listing builder.",
   "type": "module",
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
+    "agent:local": "node scripts/browser-bridge.js",
     "check": "node scripts/check.js",
     "test": "node --test test/*.test.js",
     "setup:scraper": "playwright install --with-deps chromium"
