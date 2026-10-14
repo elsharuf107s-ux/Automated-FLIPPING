@@ -23,29 +23,39 @@ async function finish(task, bridgeId = 'test-bridge') {
   return browserScoutStatus().find((entry) => entry.id === task.id);
 }
 
-test('Browser Scout creates a fallback search mission without an OpenAI key', async () => {
+test('Browser Scout creates a diversified fallback search mission without an OpenAI key', async () => {
   const task = await createBrowserScoutTask({ goal: 'Find oversized washed hoodies under $15 landed' });
   assert.equal(task.type, 'scout_suppliers');
   assert.equal(task.status, 'queued');
-  assert.ok(task.plan.queries.length >= 1);
+  assert.ok(task.plan.queries.length >= 4);
+  assert.equal(new Set(task.plan.queries).size, task.plan.queries.length);
   const finished = await finish(task, 'bridge-a');
   assert.equal(finished.status, 'completed');
 });
 
-test('Browser Scout can be claimed and completed by the local bridge', async () => {
+test('Browser Scout claims a deep mission for the local browser', async () => {
   const task = await createBrowserScoutTask({ goal: 'Find black work jackets' });
   const claimed = claimBrowserScoutTask({ bridgeId: 'bridge-b' });
   assert.equal(claimed.id, task.id);
   assert.equal(claimed.status, 'running');
   assert.equal(claimed.payload.sites.includes('AliExpress'), true);
   assert.equal(claimed.payload.sites.includes('DHgate'), true);
+  assert.ok(claimed.payload.maxSearchPages >= 2);
+  assert.ok(claimed.payload.maxProductsToInspect >= 12);
+  assert.ok(claimed.payload.maxResultsPerSearch >= 40);
 
   const accepted = completeBrowserScoutTask(task.id, {
     bridgeId: 'bridge-b',
     claimToken: claimed.claimToken,
     report: {
-      searches: [{ site: 'AliExpress', query: 'black work jacket', resultCount: 3 }],
-      products: [{ source: 'AliExpress', url: 'https://www.aliexpress.us/item/100500.html', title: 'Work jacket' }],
+      searches: [{ site: 'AliExpress', query: 'black work jacket', resultCount: 12, pagesVisited: 2 }],
+      products: [{
+        source: 'AliExpress',
+        query: 'black work jacket',
+        url: 'https://www.aliexpress.us/item/100500.html',
+        title: 'Work jacket',
+        observation: { images: [{ src: 'https://ae01.alicdn.com/example.jpg' }] }
+      }],
       warnings: []
     }
   });
@@ -54,4 +64,7 @@ test('Browser Scout can be claimed and completed by the local bridge', async () 
   const finished = browserScoutStatus().find((entry) => entry.id === task.id);
   assert.equal(finished.status, 'completed');
   assert.equal(finished.result.bestMatches.length, 1);
+  assert.equal(finished.result.bestMatches[0].image, 'https://ae01.alicdn.com/example.jpg');
+  assert.ok(Number.isFinite(finished.result.bestMatches[0].opportunityScore));
+  assert.ok(finished.result.bestMatches[0].whyLikely);
 });

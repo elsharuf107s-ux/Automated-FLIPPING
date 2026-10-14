@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
-const VERSION = '2.0.0';
+const VERSION = '3.0.0';
 const args = process.argv.slice(2);
 
 function arg(name, fallback = '') {
@@ -203,7 +203,7 @@ async function visibleSearchInput(page) {
 
 async function collectProductLinks(page, siteName, limit) {
   const config = SITE[siteName];
-  const raw = await page.locator('a[href]').evaluateAll((links) => links.slice(0, 1500).map((a) => ({
+  const raw = await page.locator('a[href]').evaluateAll((links) => links.slice(0, 1800).map((a) => ({
     href: a.href,
     text: String(a.innerText || a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600)
   }))).catch(() => []);
@@ -221,11 +221,51 @@ async function collectProductLinks(page, siteName, limit) {
   return results;
 }
 
-async function searchSupplierSite(page, siteName, query, maxResults) {
+async function loadMoreResults(page) {
+  for (let i = 0; i < 7; i += 1) {
+    await page.mouse.wheel(0, 1100).catch(() => {});
+    await page.waitForTimeout(450);
+  }
+}
+
+async function nextResultsPage(page) {
+  const before = page.url();
+  const candidates = page.locator('a[aria-label*="next" i], button[aria-label*="next" i], a[title*="next" i], button[title*="next" i], a:has-text("Next"), button:has-text("Next")');
+  const count = Math.min(await candidates.count().catch(() => 0), 12);
+  for (let i = 0; i < count; i += 1) {
+    const candidate = candidates.nth(i);
+    const visible = await candidate.isVisible().catch(() => false);
+    const disabled = await candidate.isDisabled?.().catch(() => false);
+    if (!visible || disabled) continue;
+    try {
+      await candidate.click({ timeout: 4000 });
+      await page.waitForLoadState('domcontentloaded', { timeout: 15_000 }).catch(() => {});
+      await page.waitForTimeout(700);
+      if (page.url() !== before) {
+        assertAllowedUrl(page.url());
+        return true;
+      }
+    } catch {}
+  }
+
+  try {
+    const url = new URL(before);
+    const current = Number(url.searchParams.get('page') || 1);
+    url.searchParams.set('page', String(current + 1));
+    await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 35_000 });
+    await page.waitForTimeout(700);
+    assertAllowedUrl(page.url());
+    return page.url() !== before;
+  } catch {
+    return false;
+  }
+}
+
+async function searchSupplierSite(page, siteName, query, maxResults, maxPages) {
   const config = SITE[siteName];
   console.log(`[FlipLab Scout] ${siteName}: searching “${query}”`);
   await page.goto(config.home, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(900);
 
   let usedSearchBox = false;
   const input = await visibleSearchInput(page);
@@ -244,26 +284,60 @@ async function searchSupplierSite(page, siteName, query, maxResults) {
     await page.goto(config.fallback(query), { waitUntil: 'domcontentloaded', timeout: 45_000 });
   }
 
-  assertAllowedUrl(page.url());
-  for (let i = 0; i < 4; i += 1) {
-    await page.mouse.wheel(0, 950).catch(() => {});
-    await page.waitForTimeout(600);
+  const combined = new Map();
+  let pagesVisited = 0;
+  for (let pageIndex = 0; pageIndex < maxPages && !stopping; pageIndex += 1) {
+    assertAllowedUrl(page.url());
+    await loadMoreResults(page);
+    const body = await page.locator('body').innerText({ timeout: 8000 }).catch(() => '');
+    if (/captcha|verify you are human|security verification|unusual traffic/i.test(body)) {
+      console.warn(`[FlipLab Scout] ${siteName} displayed a verification challenge; not bypassing it.`);
+      break;
+    }
+    const links = await collectProductLinks(page, siteName, maxResults);
+    for (const result of links) if (!combined.has(result.url)) combined.set(result.url, { ...result, searchPage: pageIndex + 1 });
+    pagesVisited += 1;
+    console.log(`[FlipLab Scout] ${siteName}: page ${pageIndex + 1} yielded ${links.length} links (${combined.size} unique)`);
+    if (combined.size >= maxResults || pageIndex + 1 >= maxPages) break;
+    if (!(await nextResultsPage(page))) break;
   }
-  const body = await page.locator('body').innerText({ timeout: 8000 }).catch(() => '');
-  if (/captcha|verify you are human|security verification|unusual traffic/i.test(body)) {
-    console.warn(`[FlipLab Scout] ${siteName} displayed a verification challenge; not bypassing it.`);
+
+  return { site: siteName, query, url: page.url(), usedSearchBox, pagesVisited, results: [...combined.values()].slice(0, maxResults) };
+}
+
+function diverseCandidates(candidateMap, maxProducts) {
+  const buckets = new Map();
+  for (const candidate of candidateMap.values()) {
+    const key = `${candidate.source}|${candidate.query}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(candidate);
   }
-  const results = await collectProductLinks(page, siteName, maxResults);
-  console.log(`[FlipLab Scout] ${siteName}: found ${results.length} product links`);
-  return { site: siteName, query, url: page.url(), usedSearchBox, results };
+  const chosen = [];
+  const used = new Set();
+  let round = 0;
+  while (chosen.length < maxProducts) {
+    let added = false;
+    for (const bucket of buckets.values()) {
+      const candidate = bucket[round];
+      if (!candidate || used.has(candidate.url)) continue;
+      chosen.push(candidate);
+      used.add(candidate.url);
+      added = true;
+      if (chosen.length >= maxProducts) break;
+    }
+    if (!added) break;
+    round += 1;
+  }
+  return chosen;
 }
 
 async function scoutSuppliers(task) {
   const plan = task.payload?.plan || {};
-  const queries = Array.isArray(plan.queries) && plan.queries.length ? plan.queries.slice(0, 4) : [task.payload?.goal || task.goal];
+  const queries = Array.isArray(plan.queries) && plan.queries.length ? plan.queries.slice(0, 6) : [task.payload?.goal || task.goal];
   const sites = (task.payload?.sites || ['AliExpress', 'DHgate']).filter((site) => SITE[site]);
-  const maxResults = Math.max(5, Math.min(30, Number(task.payload?.maxResultsPerSearch) || 18));
-  const maxProducts = Math.max(1, Math.min(10, Number(task.payload?.maxProductsToInspect) || 6));
+  const maxResults = Math.max(10, Math.min(60, Number(task.payload?.maxResultsPerSearch) || 42));
+  const maxPages = Math.max(1, Math.min(3, Number(task.payload?.maxSearchPages) || 2));
+  const maxProducts = Math.max(4, Math.min(16, Number(task.payload?.maxProductsToInspect) || 12));
   const page = await context.newPage();
   page.setDefaultTimeout(15_000);
   page.setDefaultNavigationTimeout(45_000);
@@ -275,14 +349,15 @@ async function scoutSuppliers(task) {
 
   try {
     console.log(`[FlipLab Scout] Mission: ${task.payload?.goal || task.goal}`);
-    console.log(`[FlipLab Scout] Queries: ${queries.join(' | ')}`);
+    console.log(`[FlipLab Scout] Creative queries: ${queries.join(' | ')}`);
+    console.log(`[FlipLab Scout] Depth: up to ${maxPages} result pages/query · inspect up to ${maxProducts} products`);
 
     for (const siteName of sites) {
       for (const query of queries) {
         if (stopping) break;
         try {
-          const search = await searchSupplierSite(page, siteName, query, maxResults);
-          searches.push({ site: siteName, query, url: search.url, resultCount: search.results.length, usedSearchBox: search.usedSearchBox });
+          const search = await searchSupplierSite(page, siteName, query, maxResults, maxPages);
+          searches.push({ site: siteName, query, url: search.url, resultCount: search.results.length, pagesVisited: search.pagesVisited, usedSearchBox: search.usedSearchBox });
           for (const result of search.results) {
             if (!candidateMap.has(result.url)) candidateMap.set(result.url, { ...result, source: siteName, query });
           }
@@ -293,17 +368,18 @@ async function scoutSuppliers(task) {
       }
     }
 
-    const candidates = [...candidateMap.values()].slice(0, maxProducts);
-    console.log(`[FlipLab Scout] Inspecting ${candidates.length} promising product pages…`);
+    const candidates = diverseCandidates(candidateMap, maxProducts);
+    console.log(`[FlipLab Scout] Inspecting ${candidates.length} diversified product pages from ${candidateMap.size} unique links…`);
     for (const [index, candidate] of candidates.entries()) {
       if (stopping) break;
       try {
-        console.log(`[FlipLab Scout] Opening ${index + 1}/${candidates.length} ${candidate.source}: ${candidate.url}`);
+        console.log(`[FlipLab Scout] Opening ${index + 1}/${candidates.length} ${candidate.source} · ${candidate.query}: ${candidate.url}`);
         await page.goto(candidate.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
         const observation = await collectObservation(page, candidate.url);
         products.push({
           source: candidate.source,
           query: candidate.query,
+          searchPage: candidate.searchPage || 1,
           url: observation.finalUrl || candidate.url,
           title: observation.title || candidate.text || 'Supplier product',
           searchText: candidate.text,
@@ -319,8 +395,8 @@ async function scoutSuppliers(task) {
       bridgeId,
       claimToken: task.claimToken,
       report: { searches, products, warnings }
-    }, 25_000);
-    console.log(`[FlipLab Scout] Finished surfing. Inspected ${products.length} products; FlipLab AI is ranking them.`);
+    }, 30_000);
+    console.log(`[FlipLab Scout] Finished surfing. Inspected ${products.length} products; FlipLab AI is ranking inventory candidates.`);
   } finally {
     await page.close().catch(() => {});
   }
