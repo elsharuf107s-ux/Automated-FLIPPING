@@ -7,6 +7,15 @@ import { publicAiConfig, saveAiConfig, validateAiPatch } from './lib/config.js';
 import { scrapeProduct, mergeScrapedItem } from './lib/scraper.js';
 import { startHuntJob, getHuntJob } from './lib/hunt.js';
 import { getSettings, saveSettings } from './lib/settings.js';
+import {
+  browserAgentStatus,
+  createSupplierVerificationTask,
+  getBrowserAgentTask,
+  heartbeatBrowserBridge,
+  claimBrowserAgentTask,
+  completeBrowserAgentTask,
+  failBrowserAgentTask
+} from './lib/browser-agent.js';
 import { httpError } from './lib/errors.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +35,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/health', async (_req, res) => {
   const ai = await publicAiConfig();
-  res.json({ ok: true, app: 'FlipLab', version: pkg.version, aiProvider: 'openai', aiConfigured: ai.configured, ai });
+  res.json({
+    ok: true,
+    app: 'FlipLab',
+    version: pkg.version,
+    aiProvider: 'openai',
+    aiConfigured: ai.configured,
+    ai,
+    browserAgent: browserAgentStatus().bridge
+  });
 });
 
 // AI Hunt runs as a short-lived server job so Codespaces/reverse proxies never
@@ -74,6 +91,42 @@ app.post('/api/analyze', async (req, res) => {
     };
   }
   res.json(analysis);
+});
+
+// Browser Agent v1 is deliberately narrow: a local Playwright process may only
+// verify supplier pages. It cannot buy, message, publish, control Depop, or bypass
+// access controls. The bridge normally reaches this API through a private
+// `gh codespace ports forward` tunnel rather than a public Codespaces port.
+app.get('/api/agent/status', (_req, res) => {
+  res.json(browserAgentStatus());
+});
+
+app.post('/api/agent/verify', (req, res) => {
+  res.status(202).json(createSupplierVerificationTask(req.body || {}));
+});
+
+app.get('/api/agent/tasks/:id', (req, res) => {
+  const task = getBrowserAgentTask(req.params.id);
+  if (!task) throw httpError(404, 'Browser Agent task expired or was not found.');
+  res.json(task);
+});
+
+app.post('/api/agent/bridge/heartbeat', (req, res) => {
+  res.json(heartbeatBrowserBridge(req.body || {}));
+});
+
+app.post('/api/agent/bridge/claim', (req, res) => {
+  const task = claimBrowserAgentTask(req.body || {});
+  if (!task) return res.status(204).end();
+  res.json(task);
+});
+
+app.post('/api/agent/tasks/:id/complete', (req, res) => {
+  res.status(202).json(completeBrowserAgentTask(req.params.id, req.body || {}));
+});
+
+app.post('/api/agent/tasks/:id/fail', (req, res) => {
+  res.json(failBrowserAgentTask(req.params.id, req.body || {}));
 });
 
 app.get('/api/settings', async (_req, res) => {
