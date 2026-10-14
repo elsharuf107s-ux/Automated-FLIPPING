@@ -6,7 +6,7 @@ import { scanEconHtml, aiReportHtml, depopHtml, depopText } from '../report.js';
 
 const DRAFT_KEY = 'fliplab-scan-draft';
 const MONEY_FIELDS = ['purchasePrice', 'inboundShipping', 'repairCost', 'targetPrice', 'outboundShipping'];
-const LOADING_STEPS = ['Opening the source page…', 'Extracting product details…', 'Reading the photo…', 'Weighing brand and condition…', 'Estimating the resale range…', 'Running the unit economics…', 'Drafting listing copy…'];
+const LOADING_STEPS = ['Opening the source page…', 'Checking buyer activity…', 'Extracting product details…', 'Reading the photo…', 'Weighing brand and condition…', 'Estimating the resale range…', 'Running the unit economics…', 'Drafting listing copy…'];
 
 const scan = { image: '', analysis: null, savedId: null, loadingTimer: null };
 const form = () => $('#scanForm');
@@ -59,6 +59,40 @@ async function takeFile(file) {
   }
 }
 
+function interestText(value = {}) {
+  return [
+    ['offers', 'offer'],
+    ['bids', 'bid'],
+    ['watchers', 'watcher'],
+    ['likes', 'like'],
+    ['carts', 'cart/bag']
+  ].flatMap(([key, label]) => {
+    const amount = Number(value[key]);
+    return Number.isFinite(amount) && amount > 0 ? [`${amount} ${label}${amount === 1 ? '' : 's'}`] : [];
+  }).join(' · ');
+}
+
+function scrapedSignalHtml(ai) {
+  const p = ai?.webScrape?.product;
+  if (!p) return '';
+  const interest = p.buyerInterest || {};
+  const text = interestText(interest);
+  const evidence = Array.isArray(interest.evidence) ? interest.evidence.filter(Boolean).slice(0, 4) : [];
+  const generic = p.genericOpportunity || {};
+  const strength = interest.strength || 'unknown';
+  const cls = strength === 'hot' ? 'buy' : strength === 'warm' ? 'watch' : '';
+  return `<div class="copy-box" style="margin-top:16px">
+    <h4>${icon('trend')} Buyer activity + listing opportunity</h4>
+    <div class="chips" style="margin:8px 0 10px">
+      ${text ? `<span class="badge ${cls}">${esc(text)}</span>` : '<span class="badge">No public activity count exposed</span>'}
+      ${Number.isFinite(Number(interest.score)) && interest.score > 0 ? `<span class="badge">Demand signal ${esc(interest.score)}/100</span>` : ''}
+      ${generic.isGeneric ? `<span class="badge watch">${icon('search')} Generic gem</span>` : ''}
+    </div>
+    ${evidence.length ? `<p><b>Evidence:</b> ${esc(evidence.join(' · '))}</p>` : '<p class="muted">The page did not expose a verified offer/bid/watcher/like/cart count. FlipLab does not treat a Make Offer button as proof that offers already exist.</p>'}
+    ${generic.isGeneric && generic.reason ? `<p style="margin-top:8px"><b>Generic angle:</b> ${esc(generic.reason)}</p>` : ''}
+  </div>`;
+}
+
 function applyScrapedProduct(webScrape) {
   const p = webScrape?.product;
   if (!p) return false;
@@ -72,7 +106,14 @@ function applyScrapedProduct(webScrape) {
   fill('category', p.category);
   fill('size', p.size);
   if (!num(f.elements.purchasePrice.value) && Number(p.price) > 0) f.elements.purchasePrice.value = p.price;
-  if (!f.elements.notes.value && p.description) f.elements.notes.value = p.description;
+  if (!f.elements.notes.value) {
+    const activity = interestText(p.buyerInterest || {});
+    f.elements.notes.value = [
+      p.description,
+      activity ? `Public buyer activity: ${activity}` : '',
+      p.genericOpportunity?.isGeneric ? `Generic opportunity: ${p.genericOpportunity.reason || 'Under-described listing'}` : ''
+    ].filter(Boolean).join('\n');
+  }
   if (!scan.image && Array.isArray(p.images) && p.images[0]) setImage(p.images[0]);
   renderScanEcon();
   saveDraft();
@@ -85,11 +126,11 @@ function placeholderHtml() {
     <h3>Your flip report appears here</h3>
     <p>Add a photo, item details, or paste a product/listing URL. FlipLab can scrape the URL with your OpenAI key before scoring it.</p>
     <ul class="result-features">
-      <li>${icon('check')}AI webpage extraction from a Source URL</li>
+      <li>${icon('check')}Verified public bids, watchers, likes, carts and offer counts when exposed</li>
+      <li>${icon('check')}Generic/under-described listing detection</li>
       <li>${icon('check')}Estimated resale range and max buy price</li>
       <li>${icon('check')}Flip score with demand and risk</li>
-      <li>${icon('check')}Listing title, description and keywords</li>
-      <li>${icon('check')}Checklist to verify before you spend</li>
+      <li>${icon('check')}Full Depop form pack and listing copy</li>
     </ul>
   </div>`;
 }
@@ -125,6 +166,7 @@ function renderResult() {
     ? `<a class="btn btn-ghost" href="#/inventory/${esc(scan.savedId)}">${icon('check')}<span>Saved — open</span></a>`
     : `<button class="btn btn-primary" type="button" id="saveItem">${icon('plus')}<span>Save to inventory</span></button>`;
   $('#resultPanel').innerHTML = `${aiReportHtml(ai, c, 'scan')}
+    ${scrapedSignalHtml(ai)}
     ${depopHtml(ai.depop, 'scan')}
     <div class="result-actions">
       <a class="btn btn-ghost" href="${esc(compsUrl('ebay', itemQuery(item) || ai.suggestedTitle))}" target="_blank" rel="noopener" title="Open eBay sold listings">${icon('external')}<span>Comps</span></a>
@@ -159,7 +201,7 @@ async function analyze(event) {
     }
     renderResult();
     const label = { openai: 'AI report ready', ollama: 'Local AI report ready' }[analysis.mode] || 'Demo report ready';
-    toast(analysis.warning ? 'AI unavailable — showing demo scoring' : scraped ? 'Page scraped + AI report ready' : label, { type: analysis.warning ? 'info' : 'success' });
+    toast(analysis.warning ? 'AI unavailable — showing demo scoring' : scraped ? 'Page + buyer activity checked' : label, { type: analysis.warning ? 'info' : 'success' });
   } catch (error) {
     $('#resultPanel').innerHTML = `<div class="result-empty"><div class="spark">${icon('alert')}</div><h3>Analysis failed</h3><p>${esc(error.message)}</p></div>`;
     toast(error.message, { type: 'error' });
