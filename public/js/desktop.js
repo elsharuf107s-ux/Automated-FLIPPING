@@ -1,12 +1,9 @@
 import { clampWindowRect, defaultDesktopLayout, sanitizeDesktopLayout } from './window-layout.js';
 
-const STORE_KEY = 'fliplab-desktop-layout-v2';
+const STORE_KEY = 'fliplab-desktop-layout-v3';
 const VIEW_META = {
-  dashboard: { title: 'Dashboard', icon: 'home' },
-  finder: { title: 'AI Hunt', icon: 'target' },
-  scanner: { title: 'AI Scanner', icon: 'spark' },
-  inventory: { title: 'Inventory', icon: 'box' },
-  sources: { title: 'Sources', icon: 'compass' },
+  finder: { title: 'Hunt', icon: 'target' },
+  scanner: { title: 'Ready to Post', icon: 'spark' },
   settings: { title: 'Settings', icon: 'sliders' }
 };
 
@@ -205,10 +202,7 @@ function makeTaskButton(view, meta) {
   button.addEventListener('click', () => {
     const record = records.get(view);
     if (!record) return;
-    if (layout[view].minimized) {
-      focusDesktopWindow(view);
-      return;
-    }
+    if (layout[view].minimized) return focusDesktopWindow(view);
     if (record.node.classList.contains('is-focused')) minimizeDesktopWindow(view);
     else focusDesktopWindow(view);
   });
@@ -262,7 +256,7 @@ function makeTaskbar() {
   bar.innerHTML = `
     <button type="button" class="desktop-home" id="desktopReset" title="Reset window layout">${icon('bolt')}<span>FlipLab</span></button>
     <div class="desktop-task-list" aria-label="Open tools"></div>
-    <div class="desktop-taskbar-hint">drag · resize · minimize</div>`;
+    <div class="desktop-taskbar-hint">Hunt → Ready to Post</div>`;
   document.body.appendChild(bar);
   bar.querySelector('#desktopReset').addEventListener('click', resetDesktopLayout);
   return bar;
