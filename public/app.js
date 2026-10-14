@@ -4,9 +4,10 @@ import { toast } from './js/ui.js';
 import { initScanner, renderScanEcon, applyScannerDefaults } from './js/views/scanner.js';
 import { initSettings, fillAiForm, fillSettingsForm, renderAiStatus, syncThemeChoice } from './js/views/settings.js';
 import { initHunt } from './js/views/hunt.js';
+import { initAgent } from './js/views/agent.js';
 import { initDesktop, openDesktopWindow, isDesktopMode } from './js/desktop.js';
 
-const VIEWS = ['finder', 'scanner', 'settings'];
+const VIEWS = ['finder', 'scanner', 'agent', 'settings'];
 const THEME_KEY = 'fliplab-theme';
 let current = 'finder';
 let ready = false;
@@ -106,6 +107,7 @@ function bindGlobal() {
     if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
     if (event.key.toLowerCase() === 'h') openView('finder');
     if (event.key.toLowerCase() === 'n') openView('scanner');
+    if (event.key.toLowerCase() === 'a') openView('agent');
   });
 
   document.addEventListener('click', async (event) => {
@@ -127,6 +129,7 @@ function bindGlobal() {
 
 async function init() {
   applyTheme(themePref());
+  initAgent();
   bindGlobal();
   initScanner();
   initHunt();
