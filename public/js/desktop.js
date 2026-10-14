@@ -1,9 +1,10 @@
 import { clampWindowRect, defaultDesktopLayout, sanitizeDesktopLayout } from './window-layout.js';
 
-const STORE_KEY = 'fliplab-desktop-layout-v3';
+const STORE_KEY = 'fliplab-desktop-layout-v4';
 const VIEW_META = {
   finder: { title: 'Hunt', icon: 'target' },
   scanner: { title: 'Ready to Post', icon: 'spark' },
+  agent: { title: 'Browser Agent', icon: 'plug' },
   settings: { title: 'Settings', icon: 'sliders' }
 };
 
@@ -242,7 +243,7 @@ function makeWindow(view, section, meta) {
     if (layout[view].maximized || layout[view].minimized) return;
     const rect = readCurrentRect(record);
     if (Math.abs(rect.width - layout[view].width) > 1 || Math.abs(rect.height - layout[view].height) > 1) {
-      layout[view] = { ...layout[view], ...rect };
+      layout[view] = { ...layout[record.view], ...rect };
       saveLayoutSoon();
     }
   });
@@ -256,7 +257,7 @@ function makeTaskbar() {
   bar.innerHTML = `
     <button type="button" class="desktop-home" id="desktopReset" title="Reset window layout">${icon('bolt')}<span>FlipLab</span></button>
     <div class="desktop-task-list" aria-label="Open tools"></div>
-    <div class="desktop-taskbar-hint">Hunt → Ready to Post</div>`;
+    <div class="desktop-taskbar-hint">Hunt → Agent verify → Ready to Post</div>`;
   document.body.appendChild(bar);
   bar.querySelector('#desktopReset').addEventListener('click', resetDesktopLayout);
   return bar;
