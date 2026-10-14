@@ -4,10 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0a0c0b" />
-  <meta name="description" content="FlipLab — AI-assisted sourcing, flip scoring, inventory and listing workspace for resellers." />
-  <title>FlipLab — Automated Flipping</title>
+  <meta name="description" content="FlipLab finds clothing opportunities, compares suppliers, and builds ready-to-post Depop listings." />
+  <title>FlipLab — Hunt to Depop</title>
   <script>
-    // Apply the saved theme before first paint so there is no flash.
     try {
       const pref = localStorage.getItem('fliplab-theme') || 'dark';
       const dark = pref === 'system' ? matchMedia('(prefers-color-scheme: dark)').matches : pref !== 'light';
@@ -15,18 +14,12 @@
     } catch {}
   </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23b9ff66'/%3E%3Cpath d='M11 23V9h11M11 16h8' stroke='%230b1006' stroke-width='3.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
-      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9v11.5h13V9"/><path d="M10 20.5v-6h4v6"/></symbol>
       <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></symbol>
-      <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 7.5 12 3 3 7.5v9L12 21l9-4.5z"/><path d="M3 7.5 12 12l9-4.5"/><path d="M12 12v9"/></symbol>
-      <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></symbol>
       <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -34,7 +27,6 @@
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/></symbol>
-      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M4 20h16"/></symbol>
       <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
       <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M16.5 6.5l3 3M14 9l2 2"/></symbol>
       <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
@@ -53,28 +45,23 @@
       <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
       <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5-5 4 4 2.5-2.5L20 19"/></symbol>
       <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
-      <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17L12 16.5l-5.5 4z"/></symbol>
       <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5 4.5 14H11l-1 7.5L19.5 10H13z"/></symbol>
     </defs>
   </svg>
 
-  <a class="skip-link" href="#main">Skip to content</a>
   <div class="app">
     <aside class="sidebar">
-      <a class="brand" href="#/dashboard" aria-label="FlipLab home">
+      <a class="brand" href="#/finder" aria-label="FlipLab Hunt">
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M11 23V9h11M11 16h8"/></svg></span>
-        <span class="brand-text"><strong>FlipLab</strong><small>Automated Flipping</small></span>
+        <span class="brand-text"><strong>FlipLab</strong><small>Hunt → Depop</small></span>
       </a>
       <nav class="nav" aria-label="Main">
-        <a class="nav-item" href="#/dashboard" data-view="dashboard"><svg class="i"><use href="#i-home"/></svg><span data-short="Home">Dashboard</span></a>
-        <a class="nav-item" href="#/finder" data-view="finder"><svg class="i"><use href="#i-target"/></svg><span data-short="Finder">Deal Finder</span></a>
-        <a class="nav-item" href="#/scanner" data-view="scanner"><svg class="i"><use href="#i-spark"/></svg><span data-short="Scan">AI Scanner</span></a>
-        <a class="nav-item" href="#/inventory" data-view="inventory"><svg class="i"><use href="#i-box"/></svg><span>Inventory</span><em class="nav-count" id="navCount" hidden>0</em></a>
-        <a class="nav-item" href="#/sources" data-view="sources"><svg class="i"><use href="#i-compass"/></svg><span>Sources</span></a>
+        <a class="nav-item" href="#/finder" data-view="finder"><svg class="i"><use href="#i-target"/></svg><span>Hunt</span></a>
+        <a class="nav-item" href="#/scanner" data-view="scanner"><svg class="i"><use href="#i-spark"/></svg><span>Ready to Post</span></a>
         <a class="nav-item" href="#/settings" data-view="settings"><svg class="i"><use href="#i-sliders"/></svg><span>Settings</span></a>
       </nav>
       <div class="sidebar-foot">
-        <a class="ai-card" href="#/settings" id="aiCard" title="AI provider settings">
+        <a class="ai-card" href="#/settings" id="aiCard" title="OpenAI settings">
           <span class="ai-dot" id="aiDot"></span>
           <span class="ai-text"><strong id="aiName">Connecting…</strong><small id="aiModel">checking server</small></span>
         </a>
@@ -84,72 +71,20 @@
 
     <main class="main" id="main" tabindex="-1">
       <header class="topbar">
-        <div><p class="eyebrow" id="pageEyebrow">Overview</p><h1 id="pageTitle">Dashboard</h1></div>
+        <div><p class="eyebrow" id="pageEyebrow">Find clothing</p><h1 id="pageTitle">Hunt</h1></div>
         <div class="topbar-actions">
-          <a class="btn btn-ghost hide-sm" href="#/inventory" id="topSearchBtn" title="Search inventory (/)"><svg class="i"><use href="#i-search"/></svg><span>Search</span><kbd>/</kbd></a>
-          <a class="btn btn-primary" href="#/scanner" title="New scan (N)"><svg class="i"><use href="#i-plus"/></svg><span>New scan</span></a>
+          <a class="btn btn-ghost" href="#/finder"><svg class="i"><use href="#i-target"/></svg><span>Hunt</span></a>
+          <a class="btn btn-primary" href="#/scanner"><svg class="i"><use href="#i-spark"/></svg><span>Ready to Post</span></a>
         </div>
       </header>
 
-      <!-- DASHBOARD -->
-      <section class="view" id="view-dashboard" data-title="Dashboard" data-eyebrow="Overview">
-        <div class="hero">
-          <div class="hero-copy">
-            <span class="pill"><svg class="i"><use href="#i-bolt"/></svg>AI-assisted · human-controlled</span>
-            <h2>Find the spread.<br><em>Keep the margin.</em></h2>
-            <p>Turn a thrift find into a buy/pass decision, listing draft, and tracked inventory in one workflow.</p>
-            <div class="hero-actions">
-              <a class="btn btn-primary btn-lg" href="#/scanner">Analyze a flip <svg class="i"><use href="#i-chevron"/></svg></a>
-              <a class="btn btn-ghost btn-lg" href="#/inventory">Open inventory</a>
-            </div>
-          </div>
-          <div class="hero-visual" id="heroVisual" aria-live="polite"></div>
-        </div>
+      <section class="view" id="view-finder" data-title="Hunt" data-eyebrow="Find clothing + cheaper suppliers"></section>
 
-        <div class="kpi-grid" id="kpis"></div>
-
-        <div id="dashBody"></div>
-      </section>
-
-      <!-- DEAL FINDER -->
-      <section class="view" id="view-finder" data-title="Deal Finder" data-eyebrow="Find underpriced items">
-        <article class="panel finder-setup" id="finderSetup" hidden>
-          <div class="setup-icon"><svg class="i"><use href="#i-target"/></svg></div>
-          <div>
-            <h3>Connect eBay to start finding deals</h3>
-            <p>FlipLab searches eBay through its official API, ranks listings by how far they sit below the typical asking price, and the AI prices each one and writes your Depop listing. It needs a free eBay developer key.</p>
-            <a class="btn btn-primary" href="#/settings">Add eBay keys in Settings</a>
-          </div>
-        </article>
-
-        <form class="panel finder-form" id="finderForm" autocomplete="off">
-          <div class="finder-row">
-            <label class="search-field grow"><svg class="i"><use href="#i-search"/></svg><input name="query" type="search" placeholder="What are you hunting for? e.g. carhartt detroit jacket" aria-label="Search eBay" required minlength="2" maxlength="100"></label>
-            <button class="btn btn-primary btn-lg" type="submit" id="finderGo"><svg class="i"><use href="#i-target"/></svg><span>Find deals</span></button>
-          </div>
-          <div class="finder-filters">
-            <label>Min price<span class="money-input"><input name="minPrice" type="number" min="0" step="1" placeholder="0" inputmode="decimal"></span></label>
-            <label>Max price<span class="money-input"><input name="maxPrice" type="number" min="0" step="1" placeholder="Any" inputmode="decimal"></span></label>
-            <label>Condition<select name="condition"><option value="any">Any</option><option value="used">Used</option><option value="new">New</option></select></label>
-            <label>Format<select name="format"><option value="all">Buy It Now + auctions</option><option value="buy">Buy It Now</option><option value="auction">Auctions</option></select></label>
-            <label>Sort<select name="sort"><option value="best">Best deals</option><option value="newest">Newly listed</option><option value="ending">Ending soonest</option><option value="price">Lowest price</option></select></label>
-          </div>
-          <div class="saved-searches">
-            <div class="chips" id="savedSearches"></div>
-            <button class="btn btn-ghost btn-sm" type="button" id="saveSearch"><svg class="i"><use href="#i-bookmark"/></svg>Save this search</button>
-          </div>
-        </form>
-
-        <div class="finder-meta" id="finderMeta" hidden></div>
-        <div id="finderResults"></div>
-      </section>
-
-      <!-- SCANNER -->
-      <section class="view" id="view-scanner" data-title="AI Scanner" data-eyebrow="Score a potential flip">
+      <section class="view" id="view-scanner" data-title="Ready to Post" data-eyebrow="Build the Depop pack">
         <div class="scanner">
           <form class="panel scan-form" id="scanForm" autocomplete="off">
             <div class="panel-head">
-              <div><p class="eyebrow">Input</p><h3>Potential flip</h3></div>
+              <div><p class="eyebrow">Item</p><h3>Listing builder</h3></div>
               <button class="btn btn-ghost btn-sm" type="button" id="scanReset"><svg class="i"><use href="#i-refresh"/></svg>Clear</button>
             </div>
 
@@ -158,112 +93,58 @@
               <img id="imagePreview" alt="Item preview">
               <div class="drop-copy">
                 <span class="drop-icon"><svg class="i"><use href="#i-camera"/></svg></span>
-                <strong>Drop, paste or click to add a photo</strong>
-                <span>JPG · PNG · WEBP — compressed in your browser</span>
+                <strong>Optional photo</strong>
+                <span>Drop, paste, or click — Hunt can fill the rest automatically</span>
               </div>
               <button class="icon-btn drop-remove" type="button" id="imageRemove" aria-label="Remove photo"><svg class="i"><use href="#i-x"/></svg></button>
             </div>
 
             <fieldset class="fieldset">
-              <legend>Item</legend>
+              <legend>Clothing details</legend>
               <div class="form-grid">
-                <label class="wide">Item title<input name="title" placeholder="e.g. Vintage Carhartt Detroit Jacket" maxlength="140"></label>
-                <label>Brand<input name="brand" placeholder="Carhartt" maxlength="80"></label>
+                <label class="wide">Title<input name="title" placeholder="AI fills this from Hunt" maxlength="140"></label>
+                <label>Brand<input name="brand" placeholder="Leave blank for generic supplier clothing" maxlength="80"></label>
                 <label>Category<input name="category" placeholder="Jacket" maxlength="80" list="categoryList"></label>
-                <label>Size<input name="size" placeholder="L" maxlength="40"></label>
-                <label>Condition<select name="condition"><option value="">Not set</option><option>New with tags</option><option>Like new</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Needs repair</option></select></label>
-                <label>Source<select name="source"><option>manual</option><option>thrift</option><option>ShopGoodwill</option><option>eBay</option><option>Facebook Marketplace</option><option>garage sale</option><option>estate sale</option></select></label>
-                <label>Source URL<input name="sourceUrl" type="url" placeholder="https://…" maxlength="500"></label>
+                <label>Size<input name="size" placeholder="L / S-XXL" maxlength="40"></label>
+                <label>Condition<select name="condition"><option value="">Not set</option><option>New with tags</option><option>Like new</option><option>Excellent</option><option>Good</option><option>Fair</option></select></label>
+                <label>Source<select name="source"><option value="manual">Manual</option><option value="AliExpress">AliExpress</option><option value="DHgate">DHgate</option><option value="Temu">Temu</option><option value="resale listing">Resale listing</option></select></label>
+                <label class="wide">Source URL<input name="sourceUrl" type="url" placeholder="Optional listing URL" maxlength="500"></label>
               </div>
             </fieldset>
 
             <fieldset class="fieldset">
-              <legend>Costs &amp; price</legend>
+              <legend>Money</legend>
               <div class="form-grid cols-3">
-                <label>Item cost<span class="money-input"><input name="purchasePrice" type="number" min="0" step="0.01" placeholder="25" inputmode="decimal"></span></label>
+                <label>Supplier / item cost<span class="money-input"><input name="purchasePrice" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
                 <label>Inbound shipping<span class="money-input"><input name="inboundShipping" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
-                <label>Cleaning / repair<span class="money-input"><input name="repairCost" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
-                <label>Target sale price<span class="money-input"><input name="targetPrice" type="number" min="0" step="0.01" placeholder="AI suggests" inputmode="decimal"></span></label>
+                <label>Extra cost<span class="money-input"><input name="repairCost" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
+                <label>Target Depop price<span class="money-input"><input name="targetPrice" type="number" min="0" step="0.01" placeholder="AI suggests" inputmode="decimal"></span></label>
                 <label>Outbound shipping<span class="money-input"><input name="outboundShipping" type="number" min="0" step="0.01" placeholder="0" inputmode="decimal"></span></label>
               </div>
               <div class="econ-strip" id="scanEcon"></div>
             </fieldset>
 
             <fieldset class="fieldset">
-              <legend>Notes</legend>
-              <textarea name="notes" rows="3" maxlength="4000" placeholder="Condition, measurements, flaws, material, era clues…" aria-label="Notes"></textarea>
+              <legend>AI context</legend>
+              <textarea name="notes" rows="5" maxlength="4000" placeholder="Hunt puts supplier match, material, color, size range, demand signals, and reference price here."></textarea>
             </fieldset>
 
             <div class="form-actions">
-              <button class="btn btn-primary btn-lg" id="analyzeBtn" type="submit"><svg class="i"><use href="#i-spark"/></svg><span>Analyze flip</span></button>
-              <span class="hint" id="scanHint">Add a photo + cost for the strongest result. <kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+              <button class="btn btn-primary btn-lg" id="analyzeBtn" type="submit"><svg class="i"><use href="#i-spark"/></svg><span>Build Depop pack</span></button>
+              <span class="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
             </div>
-            <datalist id="categoryList"><option>Jacket</option><option>Coat</option><option>Jeans</option><option>Pants</option><option>T-shirt</option><option>Sweatshirt</option><option>Hoodie</option><option>Sweater</option><option>Shirt</option><option>Dress</option><option>Skirt</option><option>Shoes</option><option>Sneakers</option><option>Boots</option><option>Bag</option><option>Hat</option><option>Accessories</option></datalist>
+            <datalist id="categoryList"><option>Jacket</option><option>Coat</option><option>Jeans</option><option>Pants</option><option>T-shirt</option><option>Sweatshirt</option><option>Hoodie</option><option>Sweater</option><option>Shirt</option><option>Dress</option><option>Skirt</option><option>Shorts</option><option>Top</option><option>Tracksuit</option><option>Activewear</option></datalist>
           </form>
 
           <aside class="panel result" id="resultPanel" aria-live="polite"></aside>
         </div>
       </section>
 
-      <!-- INVENTORY -->
-      <section class="view" id="view-inventory" data-title="Inventory" data-eyebrow="Pipeline">
-        <article class="panel inventory">
-          <div class="inv-toolbar">
-            <div class="chips" id="statusChips" role="tablist" aria-label="Filter by status"></div>
-            <div class="inv-tools">
-              <label class="search-field"><svg class="i"><use href="#i-search"/></svg><input id="invSearch" type="search" placeholder="Search title, brand, notes…" aria-label="Search inventory"></label>
-              <select id="invSort" aria-label="Sort inventory">
-                <option value="updated">Recently updated</option>
-                <option value="score">Highest score</option>
-                <option value="profit">Highest profit</option>
-                <option value="roi">Highest ROI</option>
-                <option value="cost">Highest cost</option>
-                <option value="title">Title A–Z</option>
-              </select>
-              <a class="btn btn-ghost" href="/api/export.csv" download><svg class="i"><use href="#i-download"/></svg><span>CSV</span></a>
-            </div>
-          </div>
-          <div class="inv-summary" id="invSummary"></div>
-          <div id="inventoryList"></div>
-        </article>
-      </section>
-
-      <!-- SOURCES -->
-      <section class="view" id="view-sources" data-title="Sources" data-eyebrow="Sourcing">
-        <div class="section-intro">
-          <h2>Where to hunt</h2>
-          <p>Discovery lanes and quick comp searches. FlipLab intentionally does not scrape marketplaces or automate actions that can violate their rules — these open in a new tab for you to verify by hand.</p>
-        </div>
-        <form class="panel comps" id="compsForm">
-          <div class="panel-head"><div><p class="eyebrow">Comp check</p><h3>Search real sold listings</h3></div></div>
-          <div class="comps-row">
-            <label class="search-field grow"><svg class="i"><use href="#i-search"/></svg><input id="compsQuery" type="search" placeholder="e.g. carhartt detroit jacket blanket lined" aria-label="Comp search query" required></label>
-            <button class="btn btn-primary" type="submit" data-engine="ebay">eBay sold <svg class="i"><use href="#i-external"/></svg></button>
-            <button class="btn btn-ghost" type="submit" data-engine="poshmark">Poshmark sold</button>
-            <button class="btn btn-ghost" type="submit" data-engine="depop">Depop</button>
-          </div>
-        </form>
-        <div class="source-grid" id="sourceGrid"></div>
-        <article class="panel guardrail">
-          <svg class="i"><use href="#i-info"/></svg>
-          <div><strong>Automation rule</strong><p>Automate analysis, math, inventory, image understanding and copy generation. Keep marketplace research and final publishing human-controlled unless you have an approved official API integration.</p></div>
-        </article>
-      </section>
-
-      <!-- SETTINGS -->
-      <section class="view" id="view-settings" data-title="Settings" data-eyebrow="Configuration">
+      <section class="view" id="view-settings" data-title="Settings" data-eyebrow="Only what FlipLab needs">
         <div class="settings-grid">
           <div class="settings-stack">
-          <form class="panel" id="aiForm" autocomplete="off">
-            <div class="panel-head"><div><p class="eyebrow">AI provider</p><h3>Analysis engine &amp; API keys</h3></div><span class="status-chip" id="aiStatusChip"></span></div>
-
-            <div class="segmented" role="radiogroup" aria-label="AI provider">
-              <label><input type="radio" name="provider" value="openai"><span><strong>OpenAI</strong><small>Hosted vision</small></span></label>
-              <label><input type="radio" name="provider" value="ollama"><span><strong>Ollama</strong><small>Local / open model</small></span></label>
-              <label><input type="radio" name="provider" value="demo"><span><strong>Demo</strong><small>Offline scorer</small></span></label>
-            </div>
-
-            <div class="provider-fields" data-provider="openai">
+            <form class="panel" id="aiForm" autocomplete="off">
+              <div class="panel-head"><div><p class="eyebrow">OpenAI</p><h3>AI connection</h3></div><span class="status-chip" id="aiStatusChip"></span></div>
               <label>OpenAI API key
                 <span class="key-field">
                   <svg class="i"><use href="#i-key"/></svg>
@@ -272,63 +153,26 @@
                 </span>
               </label>
               <div class="key-status" id="keyStatus"></div>
-              <label>Model<input name="openaiModel" placeholder="gpt-6-luna" spellcheck="false"></label>
-            </div>
-
-            <div class="provider-fields" data-provider="ollama">
-              <label>Ollama server URL<input name="ollamaBaseUrl" type="url" placeholder="http://127.0.0.1:11434" spellcheck="false"></label>
-              <label>Vision model<input name="ollamaModel" placeholder="qwen2.5vl:3b" spellcheck="false"></label>
-              <p class="field-note">Run <code>ollama pull qwen2.5vl:3b</code> on the machine running Ollama. Small Codespaces can be slow for vision models.</p>
-            </div>
-
-            <div class="provider-fields" data-provider="demo">
-              <p class="field-note">The demo scorer runs offline using your costs, target price and listing completeness. No photo understanding — good for trying the workflow.</p>
-            </div>
-
-            <div class="test-result" id="aiTestResult" hidden></div>
-
-            <div class="form-actions split">
-              <button class="btn btn-ghost" type="button" id="aiTest"><svg class="i"><use href="#i-plug"/></svg><span>Test connection</span></button>
-              <button class="btn btn-primary" type="submit" id="aiSave"><span>Save AI settings</span></button>
-            </div>
-            <p class="field-note small"><svg class="i"><use href="#i-info"/></svg><span>Keys are stored only on this server in <code>data/ai-config.json</code> (git-ignored, owner-only permissions) and are never sent back to the browser. A key saved here overrides the <code>OPENAI_API_KEY</code> environment variable / Codespaces secret; remove it to fall back.</span></p>
-          </form>
-
-          <form class="panel" id="ebayForm" autocomplete="off">
-            <div class="panel-head"><div><p class="eyebrow">Deal finder</p><h3>eBay connection</h3></div><span class="status-chip" id="ebayStatusChip"></span></div>
-            <ol class="setup-steps">
-              <li>Sign in (free) at <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener">developer.ebay.com</a> and create an application keyset under <b>Production</b>.</li>
-              <li>If eBay asks about <em>marketplace account deletion notifications</em>, choose the exemption — FlipLab doesn’t store eBay user data.</li>
-              <li>Paste the <b>App ID (Client ID)</b> and <b>Cert ID (Client Secret)</b> below.</li>
-            </ol>
-            <label>App ID (Client ID)<input name="ebayClientId" spellcheck="false" autocapitalize="off" placeholder="YourName-FlipLab-PRD-…"></label>
-            <label>Cert ID (Client Secret)
-              <span class="key-field">
-                <svg class="i"><use href="#i-key"/></svg>
-                <input id="ebaySecret" name="ebayClientSecret" type="password" placeholder="PRD-…" autocomplete="new-password" spellcheck="false" autocapitalize="off">
-                <button class="icon-btn" type="button" id="ebayReveal" aria-label="Show secret"><svg class="i"><use href="#i-eye"/></svg></button>
-              </span>
-            </label>
-            <div class="key-status" id="ebayKeyStatus"></div>
-            <div class="test-result" id="ebayTestResult" hidden></div>
-            <div class="form-actions split">
-              <button class="btn btn-ghost" type="button" id="ebayTest"><svg class="i"><use href="#i-plug"/></svg><span>Test connection</span></button>
-              <button class="btn btn-primary" type="submit" id="ebaySave"><span>Save eBay keys</span></button>
-            </div>
-          </form>
+              <label>Model<input name="openaiModel" placeholder="gpt-6-luna" spellcheck="false" required></label>
+              <div class="test-result" id="aiTestResult" hidden></div>
+              <div class="form-actions split">
+                <button class="btn btn-ghost" type="button" id="aiTest"><svg class="i"><use href="#i-plug"/></svg><span>Test</span></button>
+                <button class="btn btn-primary" type="submit" id="aiSave"><span>Save</span></button>
+              </div>
+              <p class="field-note small">The saved key stays server-side in <code>data/ai-config.json</code> and is never returned to the browser.</p>
+            </form>
           </div>
 
           <div class="settings-stack">
             <form class="panel" id="settingsForm">
-              <div class="panel-head"><div><p class="eyebrow">Economics</p><h3>Default assumptions</h3></div></div>
+              <div class="panel-head"><div><p class="eyebrow">Depop math</p><h3>Default assumptions</h3></div></div>
               <div class="form-grid">
                 <label>Marketplace fee<span class="unit-input" data-unit="%"><input name="marketplaceFeePercent" type="number" min="0" max="100" step="0.1"></span></label>
                 <label>Payment processing<span class="unit-input" data-unit="%"><input name="paymentFeePercent" type="number" min="0" max="100" step="0.1"></span></label>
                 <label>Default outbound shipping<span class="money-input"><input name="defaultOutboundShipping" type="number" min="0" step="0.01"></span></label>
                 <label>Target ROI<span class="unit-input" data-unit="%"><input name="targetRoiPercent" type="number" min="0" step="1"></span></label>
               </div>
-              <p class="field-note">New items copy these fees. Target ROI drives the “max buy” number in the scanner.</p>
-              <div class="form-actions"><button class="btn btn-primary" type="submit">Save economics</button></div>
+              <div class="form-actions"><button class="btn btn-primary" type="submit">Save defaults</button></div>
             </form>
 
             <div class="panel">
@@ -339,22 +183,11 @@
                 <label><input type="radio" name="theme" value="system"><span><strong>System</strong></span></label>
               </div>
             </div>
-
-            <div class="panel">
-              <div class="panel-head"><div><p class="eyebrow">Data</p><h3>Your inventory</h3></div></div>
-              <p class="field-note" id="dataNote">Inventory is stored on this server in <code>data/db.json</code>, photos in <code>data/uploads/</code>.</p>
-              <div class="form-actions"><a class="btn btn-ghost" href="/api/export.csv" download><svg class="i"><use href="#i-download"/></svg><span>Export CSV</span></a></div>
-            </div>
           </div>
         </div>
       </section>
     </main>
   </div>
-
-  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
-  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden></aside>
-  <div class="drawer-backdrop" id="reportBackdrop" hidden></div>
-  <aside class="drawer wide" id="reportDrawer" role="dialog" aria-modal="true" aria-labelledby="reportTitle" hidden></aside>
 
   <dialog class="modal" id="confirmModal">
     <form method="dialog">
