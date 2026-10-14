@@ -5,11 +5,12 @@ import path from 'node:path';
 import { useTempDataDir } from './helpers.js';
 
 const dir = await useTempDataDir();
+delete process.env.OPENAI_API_KEY;
 const config = await import('../lib/config.js');
 
 const KEY = 'sk-proj-test-0123456789abcdefghijklmnop';
 
-test('defaults to openai with no key', async () => {
+test('defaults to OpenAI with no key', async () => {
   const pub = await config.publicAiConfig();
   assert.equal(pub.provider, 'openai');
   assert.equal(pub.configured, false);
@@ -25,7 +26,7 @@ test('environment key is used and masked', async () => {
   assert.equal(JSON.stringify(pub).includes('0123456789'), false);
 });
 
-test('a key saved in the app overrides the environment and is stored privately', async () => {
+test('saved key overrides the environment and is stored privately', async () => {
   const pub = await config.saveAiConfig({ openaiApiKey: KEY, openaiModel: 'my-model' });
   assert.equal(pub.sources.openaiApiKey, 'app');
   assert.equal(pub.openai.model, 'my-model');
@@ -37,29 +38,23 @@ test('a key saved in the app overrides the environment and is stored privately',
   if (process.platform !== 'win32') assert.equal(stat.mode & 0o777, 0o600);
 });
 
-test('saving without a key keeps the existing key', async () => {
-  await config.saveAiConfig({ provider: 'ollama' });
-  assert.equal((await config.resolveAiConfig()).openaiApiKey, KEY);
-});
-
-test('clearing the key falls back to the environment', async () => {
+test('clearing the saved key falls back to the environment', async () => {
   const pub = await config.saveAiConfig({ openaiApiKey: '' });
   assert.equal(pub.sources.openaiApiKey, 'env');
   delete process.env.OPENAI_API_KEY;
   assert.equal((await config.publicAiConfig()).openai.keySet, false);
 });
 
-test('validates input', () => {
-  assert.throws(() => config.validateAiPatch({ provider: 'skynet' }), /Unknown AI provider/);
+test('validates only the settings the lean app supports', () => {
+  assert.throws(() => config.validateAiPatch({ provider: 'ollama' }), /uses OpenAI/);
   assert.throws(() => config.validateAiPatch({ openaiApiKey: 'short' }), /valid OpenAI API key/);
   assert.throws(() => config.validateAiPatch({ openaiApiKey: 'sk-has spaces in the middle of it' }), /valid OpenAI API key/);
-  assert.throws(() => config.validateAiPatch({ ollamaBaseUrl: 'file:///etc/passwd' }), /http/);
   assert.throws(() => config.validateAiPatch({ openaiModel: 'two words' }), /spaces/);
 });
 
-test('draft overrides are used for connection tests without saving', async () => {
-  const resolved = await config.resolveAiConfig({ provider: 'demo', ollamaModel: 'llava' });
-  assert.equal(resolved.provider, 'demo');
-  assert.equal(resolved.ollamaModel, 'llava');
-  assert.equal((await config.resolveAiConfig()).provider, 'ollama');
+test('draft model overrides work without saving', async () => {
+  const resolved = await config.resolveAiConfig({ openaiModel: 'temporary-model' });
+  assert.equal(resolved.openaiModel, 'temporary-model');
+  assert.equal(resolved.provider, 'openai');
+  assert.notEqual((await config.resolveAiConfig()).openaiModel, 'temporary-model');
 });
