@@ -21,17 +21,26 @@ export function defaultDesktopLayout(width = 1280, height = 720) {
   const h = Math.max(520, finite(height, 720));
   const gap = 12;
   const usableW = w - gap * 3;
-  const finderW = Math.round(usableW * 0.52);
+  const finderW = Math.round(usableW * 0.54);
   const scannerW = usableW - finderW;
   const windowH = Math.max(420, h - gap * 2);
 
   return {
-    finder: { ...clampWindowRect({ left: gap, top: gap, width: finderW, height: windowH }, { width: w, height: h }), minimized: false, maximized: false },
-    scanner: { ...clampWindowRect({ left: gap * 2 + finderW, top: gap, width: scannerW, height: windowH }, { width: w, height: h }), minimized: false, maximized: false },
-    inventory: { ...clampWindowRect({ left: Math.round(w * 0.18), top: 52, width: Math.round(w * 0.64), height: Math.round(h * 0.78) }, { width: w, height: h }), minimized: true, maximized: false },
-    dashboard: { ...clampWindowRect({ left: 36, top: 34, width: Math.round(w * 0.68), height: Math.round(h * 0.78) }, { width: w, height: h }), minimized: true, maximized: false },
-    sources: { ...clampWindowRect({ left: Math.round(w * 0.22), top: 44, width: Math.round(w * 0.58), height: Math.round(h * 0.72) }, { width: w, height: h }), minimized: true, maximized: false },
-    settings: { ...clampWindowRect({ left: Math.round(w * 0.24), top: 38, width: Math.round(w * 0.56), height: Math.round(h * 0.76) }, { width: w, height: h }), minimized: true, maximized: false }
+    finder: {
+      ...clampWindowRect({ left: gap, top: gap, width: finderW, height: windowH }, { width: w, height: h }),
+      minimized: false,
+      maximized: false
+    },
+    scanner: {
+      ...clampWindowRect({ left: gap * 2 + finderW, top: gap, width: scannerW, height: windowH }, { width: w, height: h }),
+      minimized: false,
+      maximized: false
+    },
+    settings: {
+      ...clampWindowRect({ left: Math.round(w * 0.24), top: 38, width: Math.round(w * 0.56), height: Math.round(h * 0.76) }, { width: w, height: h }),
+      minimized: true,
+      maximized: false
+    }
   };
 }
 
