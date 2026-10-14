@@ -8,7 +8,7 @@ import { initAgent } from './js/views/agent.js';
 import { initInventory } from './js/views/inventory.js';
 import { initDesktop, openDesktopWindow, isDesktopMode } from './js/desktop.js';
 
-const VIEWS = ['finder', 'inventory', 'scanner', 'agent', 'settings'];
+const VIEWS = ['finder', 'scanner', 'agent', 'settings'];
 const THEME_KEY = 'fliplab-theme';
 let current = 'finder';
 let ready = false;
@@ -107,9 +107,8 @@ function bindGlobal() {
   document.addEventListener('keydown', (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
     if (event.key.toLowerCase() === 'h') openView('finder');
-    if (event.key.toLowerCase() === 'i') openView('inventory');
     if (event.key.toLowerCase() === 'n') openView('scanner');
-    if (event.key.toLowerCase() === 'a') openView('agent');
+    if (event.key.toLowerCase() === 'a' || event.key.toLowerCase() === 'i') openView('agent');
   });
 
   document.addEventListener('click', async (event) => {
@@ -131,8 +130,8 @@ function bindGlobal() {
 
 async function init() {
   applyTheme(themePref());
-  initInventory();
   initAgent();
+  initInventory();
   bindGlobal();
   initScanner();
   initHunt();
