@@ -55,16 +55,14 @@ function normalizeItem(task, match, rank) {
 
 function ingestScoutTask(task) {
   if (task?.type !== 'scout_suppliers' || task.status !== 'completed' || !Array.isArray(task.result?.bestMatches)) return 0;
-  let changed = 0;
+  let added = 0;
   const byId = new Map(inventory.map((item) => [item.id, item]));
   task.result.bestMatches.slice(0, 10).forEach((match, index) => {
     if (!match?.url && !match?.title) return;
     const item = normalizeItem(task, match, index + 1);
     const previous = byId.get(item.id);
-    if (!previous || JSON.stringify(previous) !== JSON.stringify(item)) {
-      byId.set(item.id, item);
-      changed += previous ? 0 : 1;
-    }
+    if (!previous) added += 1;
+    byId.set(item.id, item);
   });
   inventory = [...byId.values()]
     .sort((a, b) => (b.opportunityScore - a.opportunityScore) || String(b.addedAt).localeCompare(String(a.addedAt)))
@@ -76,7 +74,7 @@ function ingestScoutTask(task) {
     const count = task.result.bestMatches.slice(0, 10).length;
     if (count) toast(`Browser Scout added ${count} ranked item${count === 1 ? '' : 's'} to Inventory`, { type: 'success', duration: 2200 });
   }
-  return changed;
+  return added;
 }
 
 function scoreClass(score) {
@@ -130,7 +128,7 @@ function renderInventory() {
   const list = $('#inventoryList');
   if (!meta || !list) return;
   const high = inventory.filter((item) => item.opportunityScore >= 80).length;
-  meta.innerHTML = `<b>${inventory.length}</b> ranked candidates · <b>${high}</b> high-confidence opportunities · automatically filled by Browser Scout`;
+  meta.innerHTML = `<b>${inventory.length}</b> ranked candidates · <b>${high}</b> high-opportunity picks · automatically filled when Browser Scout finishes`;
   list.innerHTML = inventory.length
     ? `<div class="deal-grid">${inventory.map(itemHtml).join('')}</div>`
     : `<div class="empty">${icon('wallet')}<strong>No Scout Inventory yet</strong>Finish a Browser Scout mission. Its strongest inspected products will appear here automatically with a reason and a Ready to Post button.</div>`;
@@ -185,35 +183,24 @@ async function syncScoutInventory() {
 }
 
 function injectInventoryShell() {
-  if ($('#view-inventory')) return;
-  const nav = document.querySelector('.nav');
-  const scanner = nav?.querySelector('[data-view="scanner"]');
-  const link = document.createElement('a');
-  link.className = 'nav-item';
-  link.href = '#/inventory';
-  link.dataset.view = 'inventory';
-  link.innerHTML = `${icon('wallet')}<span>Scout Inventory</span>`;
-  if (scanner) nav.insertBefore(link, scanner);
-  else nav?.appendChild(link);
-
-  const section = document.createElement('section');
-  section.className = 'view';
-  section.id = 'view-inventory';
-  section.dataset.title = 'Scout Inventory';
-  section.dataset.eyebrow = 'Most likely Browser Scout finds';
-  section.innerHTML = `
-    <div style="display:grid;gap:14px;padding-bottom:10px">
-      <article class="panel">
-        <div class="panel-head">
-          <div><p class="eyebrow">Browser Scout shortlist</p><h3>Most likely items worth turning into listings</h3></div>
-          <button class="btn btn-ghost btn-sm" type="button" id="inventoryClear">${icon('trash')}<span>Clear</span></button>
-        </div>
-        <p class="field-note">After a Browser Scout mission finishes, FlipLab automatically saves its ranked products here. The score is based on the sourcing goal and captured supplier evidence; it is not a guarantee of sales.</p>
-        <p class="field-note" id="inventoryMeta" style="margin-top:10px"></p>
-      </article>
-      <div id="inventoryList"></div>
-    </div>`;
-  document.querySelector('.main')?.appendChild(section);
+  if ($('#scoutInventoryPanel')) return;
+  const agentRoot = $('#view-agent > div');
+  if (!agentRoot) return;
+  const wrapper = document.createElement('div');
+  wrapper.id = 'scoutInventoryPanel';
+  wrapper.style.display = 'grid';
+  wrapper.style.gap = '12px';
+  wrapper.innerHTML = `
+    <article class="panel">
+      <div class="panel-head">
+        <div><p class="eyebrow">Scout Inventory</p><h3>Most likely items worth turning into listings</h3></div>
+        <button class="btn btn-ghost btn-sm" type="button" id="inventoryClear">${icon('trash')}<span>Clear</span></button>
+      </div>
+      <p class="field-note">After surfing finishes, FlipLab automatically stores the AI-ranked shortlist here. “Opportunity” means fit for the sourcing mission based on captured supplier evidence; it is not a guarantee of sales.</p>
+      <p class="field-note" id="inventoryMeta" style="margin-top:10px"></p>
+    </article>
+    <div id="inventoryList"></div>`;
+  agentRoot.appendChild(wrapper);
 }
 
 export function initInventory() {
